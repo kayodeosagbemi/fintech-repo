@@ -7,6 +7,32 @@ Your design for reference:
 
 ![Design](docs/design.png)
 
+Your other notes:
+```
+Nouns
+
+Company
+Contractor/Payee
+Invoice
+Payment
+
+**How Invoices are captured.
+Functional
+Single + Batch payments
+Correctness
+Avoid duplicate payments/trxns
+Data Isolation between Companies/Payees
+Ability to view details of payments
+Transaction statement
+
+
+Non-functional
+Number of payments = Throughput = 30,000 payments per day
+Number of users= 100,000 Users
+Latency of a single payment 
+Availability (Up time) 5 9s of avail
+```
+
 ## The Ask
 Using the system design you proposed earlier (or an evolved version of it):
 
