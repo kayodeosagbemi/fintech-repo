@@ -5,6 +5,8 @@ For this exercise, we’d like you to translate that design into code.
 
 Your design for reference:
 
+![Design](docs/design.png)
+
 ## The Ask
 Using the system design you proposed earlier (or an evolved version of it):
 
