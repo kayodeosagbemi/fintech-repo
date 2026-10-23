@@ -6,9 +6,11 @@ public static class QueueNames
     public const string Notifications = "notifications";
     public const string ValidatedPayments = "validated-payments";
     public const string PaymentEventsCdc = "payment-events-cdc";
-    public const string PymtQueue = "pymt-queue";
+    public const string PymtQueue = "pymt-queue";                 // consumed by the StatementProjector
+    public const string PymtQueueRails = "pymt-queue-rails";      // second "subscription" on Pymt Queue: PaymentRailsDispatcher
 
-    public static readonly IReadOnlyList<string> All = new[] { Notifications, ValidatedPayments, PaymentEventsCdc, PymtQueue };
+    public static readonly IReadOnlyList<string> All =
+        new[] { Notifications, ValidatedPayments, PaymentEventsCdc, PymtQueue, PymtQueueRails };
 }
 
 public abstract record IntegrationEvent(Guid PaymentId, Guid CompanyId);
