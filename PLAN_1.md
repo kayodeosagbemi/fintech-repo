@@ -925,9 +925,9 @@ This is the practical payoff of keeping `Client.UseCases` free of `Console`/file
 
 ## Required artifacts checklist (per README)
 
-- [ ] `DESIGN.md` — key decisions, trade-offs, scoped-out items. Pull directly from this plan's assumptions (§3.1), rejected alternatives (§1.4's global-query-filter note, §3.3's MassTransit alternative), and explicit scope-outs (§1.3's no-hard-delete, §3.4's CDC substitution, §5.4's retry/DLQ approximation, §5.2's no-approval-timeout gap).
-- [x] `RUN-INSTRUCTIONS.md` — drafted for Options A/B (source, Docker). **Needs a follow-up edit once §6's console app exists**, adding a "run the console client" step (`dotnet run --project src/Plooto.Ap.Client.Console`) pointed at whichever API instance (A or B) is running.
-- [ ] `AI-TRANSCRIPT.md` — full conversation transcript of AI usage, including this planning session and the Round 2 revisions.
+- [x] `DESIGN.md` — key decisions, trade-offs, scoped-out items. Pull directly from this plan's assumptions (§3.1), rejected alternatives (§1.4's global-query-filter note, §3.3's MassTransit alternative), and explicit scope-outs (§1.3's no-hard-delete, §3.4's CDC substitution, §5.4's retry/DLQ approximation, §5.2's no-approval-timeout gap).
+- [x] `RUN-INSTRUCTIONS.md` — updated with the console client walkthrough.
+- [~] `AI-TRANSCRIPT.md` — full conversation transcript of AI usage, including this planning session and the Round 2 revisions.
 - [x] `docs/design-refined.svg` — already generated; still accurate as-is (it documents the local-dev mapping from §3.3.1; the cost-consolidated cloud mapping is §3.3.2's separate topic/subscription table, not a diagram change).
-- [ ] Console client (§6) — not a README-required artifact by name, but the requested way to exercise every use case without a UI; worth calling out in `DESIGN.md` as the project's manual test tool.
+- [x] Console client (§6) — not a README-required artifact by name, but the requested way to exercise every use case without a UI; worth calling out in `DESIGN.md` as the project's manual test tool.
 - [x] CSV template (§7.2) — static copy at [`docs/invoice-template.csv`](docs/invoice-template.csv), in addition to the console app's on-demand generator, so a reader can grab it without running anything.

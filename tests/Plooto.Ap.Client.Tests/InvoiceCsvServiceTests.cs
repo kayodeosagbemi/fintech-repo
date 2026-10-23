@@ -20,7 +20,7 @@ public class InvoiceCsvServiceTests
 
         Assert.Empty(r.Errors);
         Assert.Equal(2, r.Rows.Count);
-        Assert.Equal(new InvoiceCsvRow(2, "INV-1", "jane@example.com", 2500.00m, "USD", new DateOnly(2099, 11, 15), "October consulting"), r.Rows[0]);
+        Assert.Equal(new InvoiceCsvRow(2, "INV-1,jane@example.com,2500.00,USD,2099-11-15,October consulting", "INV-1", "jane@example.com", 2500.00m, "USD", new DateOnly(2099, 11, 15), "October consulting"), r.Rows[0]);
         Assert.Null(r.Rows[1].Currency);          // blank => company default, decided server-side
         Assert.Null(r.Rows[1].Description);
     }

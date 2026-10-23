@@ -175,7 +175,7 @@ public sealed class ImportInvoicesFromCsvUseCase(ApiClient api, InvoiceCsvServic
                 var lookup = await api.ListContractorsAsync(row.ContractorEmail, ct: ct);
                 if (!lookup.IsSuccess)
                 {
-                    errors.Add(new CsvRowError(row.LineNumber, row.InvoiceNumber, $"Contractor lookup failed: {lookup.Error}"));
+                    errors.Add(new CsvRowError(row.LineNumber, row.RawLine, $"Contractor lookup failed: {lookup.Error}"));
                     continue;
                 }
                 contractorId = lookup.Value!.FirstOrDefault()?.Id;
@@ -183,14 +183,14 @@ public sealed class ImportInvoicesFromCsvUseCase(ApiClient api, InvoiceCsvServic
             }
             if (contractorId is null)
             {
-                errors.Add(new CsvRowError(row.LineNumber, row.InvoiceNumber, $"No active contractor with email '{row.ContractorEmail}'."));
+                errors.Add(new CsvRowError(row.LineNumber, row.RawLine, $"No active contractor with email '{row.ContractorEmail}'."));
                 continue;
             }
 
             var response = await api.CreateInvoiceAsync(new CreateInvoiceRequest(contractorId.Value, row.InvoiceNumber, row.Amount,
                 row.Currency, row.DueDate, row.Description), ct);
             if (response.IsSuccess) created.Add(new ImportedInvoice(row.LineNumber, row.InvoiceNumber, response.Value!.Id));
-            else errors.Add(new CsvRowError(row.LineNumber, row.InvoiceNumber, response.Error ?? $"API returned {response.StatusCode}."));
+            else errors.Add(new CsvRowError(row.LineNumber, row.RawLine, response.Error ?? $"API returned {response.StatusCode}."));
         }
 
         return new CsvImportResult(created, errors.OrderBy(e => e.LineNumber).ToList(), parsed.Warnings);

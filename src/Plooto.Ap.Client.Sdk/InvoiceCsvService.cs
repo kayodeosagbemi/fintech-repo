@@ -5,7 +5,7 @@ using CsvHelper.Configuration;
 namespace Plooto.Ap.Client.Sdk;
 
 /// <summary>One valid row. The company never appears in the file: it always comes from the session's API key.</summary>
-public sealed record InvoiceCsvRow(int LineNumber, string InvoiceNumber, string ContractorEmail, decimal Amount,
+public sealed record InvoiceCsvRow(int LineNumber, string RawLine, string InvoiceNumber, string ContractorEmail, decimal Amount,
     string? Currency, DateOnly DueDate, string? Description);
 
 public sealed record CsvRowError(int LineNumber, string RawLine, string Reason);
@@ -101,7 +101,7 @@ public sealed class InvoiceCsvService
             if (due < today) warnings.Add(new CsvRowWarning(line, $"DueDate {due:yyyy-MM-dd} is in the past (imported anyway)."));
             seenNumbers[number] = line;
             var description = Field("Description");
-            rows.Add(new InvoiceCsvRow(line, number, email, amount, currency.Length == 0 ? null : currency.ToUpperInvariant(), due,
+            rows.Add(new InvoiceCsvRow(line, raw, number, email, amount, currency.Length == 0 ? null : currency.ToUpperInvariant(), due,
                 description.Length == 0 ? null : description));
         }
 
