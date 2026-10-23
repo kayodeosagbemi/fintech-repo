@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Plooto.Ap.Api;
-using Plooto.Ap.Api.Contracts;
+using Microsoft.AspNetCore.Authentication;
+using Plooto.Ap.Api.Auth;
 using Plooto.Ap.Api.Endpoints;
 using Plooto.Ap.Api.Middleware;
 using Plooto.Ap.Infrastructure;
@@ -32,6 +33,11 @@ builder.Services.AddPaymentServices(p => builder.Configuration.GetSection("Payme
 builder.Services.AddNotificationServices();
 builder.Services.AddScoped<PaymentOrchestrator>();
 
+builder.Services
+    .AddAuthentication(ApiKeyAuthenticationOptions.Scheme)
+    .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationOptions.Scheme, _ => { });
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
 // Fail fast: a migration failure throws here and the process exits with the EF Core exception logged. No silent partial schema.
@@ -46,8 +52,13 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 
 app.UseMiddleware<ErrorHandlingMiddleware>();
+app.UseAuthentication();
+app.UseAuthorization();
 
-var scoped = app.MapGroup("/api/v1/companies/{companyId:guid}");
+// Every company-scoped route requires a valid key AND that the key belongs to the company in the URL.
+var scoped = app.MapGroup("/api/v1/companies/{companyId:guid}")
+    .RequireAuthorization()
+    .AddEndpointFilter<CompanyScopeFilter>();
 app.MapCompanyEndpoints(scoped);
 scoped.MapPreferencesEndpoints();
 scoped.MapContractorEndpoints();
