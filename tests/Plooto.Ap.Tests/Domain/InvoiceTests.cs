@@ -46,6 +46,54 @@ public class InvoiceTests
     }
 
     [Fact]
+    public void Reject_WhenSubmitted_SetsRejected()
+    {
+        var inv = NewInvoice();
+        inv.Reject();
+        Assert.Equal(InvoiceStatus.Rejected, inv.Status);
+    }
+
+    [Fact]
+    public void Reject_WhenApproved_Throws()
+    {
+        var inv = NewInvoice();
+        inv.Approve();
+        Assert.Throws<InvalidOperationException>(inv.Reject);
+    }
+
+    [Fact]
+    public void Approve_WhenRejected_Throws()
+    {
+        var inv = NewInvoice();
+        inv.Reject();
+        Assert.Throws<InvalidOperationException>(inv.Approve);
+    }
+
+    [Fact]
+    public void Approve_WhenVoid_Throws()
+    {
+        var inv = NewInvoice();
+        inv.Void();
+        Assert.Throws<InvalidOperationException>(inv.Approve);
+    }
+
+    [Fact]
+    public void Update_WhenApproved_Throws()
+    {
+        var inv = NewInvoice();
+        inv.Approve();
+        Assert.Throws<InvalidOperationException>(() => inv.Update(5m, "USD", new DateOnly(2026, 1, 1), null));
+    }
+
+    [Fact]
+    public void Update_WhenVoid_Throws()
+    {
+        var inv = NewInvoice();
+        inv.Void();
+        Assert.Throws<InvalidOperationException>(() => inv.Update(5m, "USD", new DateOnly(2026, 1, 1), null));
+    }
+
+    [Fact]
     public void MarkPaid_WhenNotApproved_Throws() =>
         Assert.Throws<InvalidOperationException>(NewInvoice().MarkPaid);
 

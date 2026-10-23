@@ -83,6 +83,81 @@ public class PaymentTests
     }
 
     [Fact]
+    public void Create_WithBadCurrency_Throws() =>
+        Assert.Throws<ArgumentException>(() =>
+            Payment.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 5m, "DOLLARS", PaymentMethod.Single, "k"));
+
+    [Fact]
+    public void Create_NormalizesCurrency() =>
+        Assert.Equal("USD", Payment.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 5m, "usd", PaymentMethod.Single, "k").Currency);
+
+    [Fact]
+    public void Create_WithEmptyGuids_Throws()
+    {
+        var g = Guid.NewGuid();
+        Assert.Throws<ArgumentException>(() => Payment.Create(Guid.Empty, g, g, 5m, "USD", PaymentMethod.Single, "k"));
+        Assert.Throws<ArgumentException>(() => Payment.Create(g, Guid.Empty, g, 5m, "USD", PaymentMethod.Single, "k"));
+        Assert.Throws<ArgumentException>(() => Payment.Create(g, g, Guid.Empty, 5m, "USD", PaymentMethod.Single, "k"));
+    }
+
+    [Fact]
+    public void MarkProcessing_FromApproved_SetsProcessing()
+    {
+        var p = NewPayment();
+        p.Approve();
+        p.MarkProcessing();
+        Assert.Equal(PaymentStatus.Processing, p.Status);
+    }
+
+    [Fact]
+    public void MarkProcessing_Twice_Throws()
+    {
+        var p = NewPayment();
+        p.Approve();
+        p.MarkProcessing();
+        Assert.Throws<InvalidOperationException>(p.MarkProcessing);
+    }
+
+    [Fact]
+    public void MarkCompleted_FromApproved_Throws()
+    {
+        var p = NewPayment();
+        p.Approve();
+        Assert.Throws<InvalidOperationException>(p.MarkCompleted);
+    }
+
+    [Fact]
+    public void MarkFailed_FromPending_Throws() =>
+        Assert.Throws<InvalidOperationException>(() => NewPayment().MarkFailed("x"));
+
+    [Fact]
+    public void MarkFailed_FromApproved_SetsFailed()
+    {
+        var p = NewPayment();
+        p.Approve();
+        p.MarkFailed("x");
+        Assert.Equal(PaymentStatus.Failed, p.Status);
+        Assert.NotNull(p.CompletedAt);
+    }
+
+    [Fact]
+    public void MarkFailed_And_MarkCancelled_RequireReason()
+    {
+        var p = NewPayment();
+        Assert.Throws<ArgumentException>(() => p.MarkCancelled(" "));
+        p.Approve();
+        Assert.Throws<ArgumentException>(() => p.MarkFailed(""));
+    }
+
+    [Fact]
+    public void MarkCancelled_SetsCompletedAt()
+    {
+        var p = NewPayment();
+        p.MarkCancelled("no");
+        Assert.NotNull(p.CompletedAt);
+    }
+
+    [Fact]
     public void MarkFailed_WhenAlreadyCompleted_Throws()
     {
         var p = NewPayment();

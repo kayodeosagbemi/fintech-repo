@@ -29,7 +29,12 @@ public class Payment
     public static Payment Create(Guid companyId, Guid invoiceId, Guid contractorId, decimal amount, string currency,
         PaymentMethod method, string idempotencyKey, Guid? batchId = null, string? rail = null)
     {
+        if (companyId == Guid.Empty) throw new ArgumentException("CompanyId is required.", nameof(companyId));
+        if (invoiceId == Guid.Empty) throw new ArgumentException("InvoiceId is required.", nameof(invoiceId));
+        if (contractorId == Guid.Empty) throw new ArgumentException("ContractorId is required.", nameof(contractorId));
         if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount), "Amount must be greater than zero.");
+        if (string.IsNullOrWhiteSpace(currency) || currency.Trim().Length != 3)
+            throw new ArgumentException("Currency must be a 3-letter ISO 4217 code.", nameof(currency));
         if (string.IsNullOrWhiteSpace(idempotencyKey)) throw new ArgumentException("IdempotencyKey is required.", nameof(idempotencyKey));
         return new Payment
         {
@@ -38,7 +43,7 @@ public class Payment
             InvoiceId = invoiceId,
             ContractorId = contractorId,
             Amount = amount,
-            Currency = currency,
+            Currency = currency.Trim().ToUpperInvariant(),
             Method = method,
             BatchId = batchId,
             IdempotencyKey = idempotencyKey,
@@ -58,9 +63,11 @@ public class Payment
     /// <summary>Pending to Cancelled (approver rejected).</summary>
     public void MarkCancelled(string reason)
     {
+        if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("A reason is required.", nameof(reason));
         Require(Status == PaymentStatus.Pending, "cancelled", PaymentStatus.Pending);
         Status = PaymentStatus.Cancelled;
         FailureReason = reason;
+        CompletedAt = DateTimeOffset.UtcNow;
     }
 
     public void MarkProcessing()
@@ -78,6 +85,7 @@ public class Payment
 
     public void MarkFailed(string reason)
     {
+        if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("A reason is required.", nameof(reason));
         if (Status is not (PaymentStatus.Approved or PaymentStatus.Processing))
             throw new InvalidOperationException($"Payment in status {Status} cannot fail.");
         Status = PaymentStatus.Failed;

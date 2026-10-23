@@ -15,14 +15,17 @@ public class CompanyPreferences
 
     public static CompanyPreferences Create(Guid companyId, string defaultCurrency, bool requireApproval, decimal threshold, string rail)
     {
+        if (string.IsNullOrWhiteSpace(defaultCurrency) || defaultCurrency.Trim().Length != 3)
+            throw new ArgumentException("Currency must be a 3-letter ISO 4217 code.", nameof(defaultCurrency));
+        if (string.IsNullOrWhiteSpace(rail)) throw new ArgumentException("Payment rail is required.", nameof(rail));
         if (threshold < 0) throw new ArgumentOutOfRangeException(nameof(threshold), "Threshold cannot be negative.");
         return new CompanyPreferences
         {
             CompanyId = companyId,
-            DefaultCurrency = defaultCurrency.ToUpperInvariant(),
+            DefaultCurrency = defaultCurrency.Trim().ToUpperInvariant(),
             RequireApprovalAboveThreshold = requireApproval,
             ApprovalThreshold = threshold,
-            PreferredPaymentRail = rail,
+            PreferredPaymentRail = rail.Trim(),
         };
     }
 

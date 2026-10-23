@@ -45,12 +45,14 @@ public class PaymentEvent
 
     public void MarkDispatched(DateTimeOffset now)
     {
+        Guard(Status == OutboxStatus.Pending, "dispatched", OutboxStatus.Pending);
         Status = OutboxStatus.Dispatched;
         DispatchedAt = now;
     }
 
     public void MarkProcessed(DateTimeOffset now)
     {
+        Guard(Status == OutboxStatus.Dispatched, "processed", OutboxStatus.Dispatched);
         Status = OutboxStatus.Processed;
         PublishedAt = now;
         LastError = null;
@@ -59,6 +61,9 @@ public class PaymentEvent
     /// <summary>Records a failed publish/consume attempt: exponential backoff, then dead-letter after <see cref="MaxAttempts"/>.</summary>
     public void RecordFailure(string error, DateTimeOffset now)
     {
+        if (Status is not (OutboxStatus.Pending or OutboxStatus.Dispatched))
+            throw new InvalidOperationException($"Cannot record a failure for an event in status {Status}.");
+        error ??= "";
         AttemptCount++;
         LastError = error.Length > 1000 ? error[..1000] : error;
         if (AttemptCount >= MaxAttempts)
@@ -73,7 +78,13 @@ public class PaymentEvent
     /// <summary>Re-queues a row stuck in Dispatched (consumer crashed before finishing).</summary>
     public void Requeue(DateTimeOffset now)
     {
+        Guard(Status == OutboxStatus.Dispatched, "requeued", OutboxStatus.Dispatched);
         Status = OutboxStatus.Pending;
         NextAttemptAt = now;
+    }
+
+    private void Guard(bool ok, string verb, OutboxStatus expected)
+    {
+        if (!ok) throw new InvalidOperationException($"Event can only be {verb} from {expected} (current: {Status}).");
     }
 }

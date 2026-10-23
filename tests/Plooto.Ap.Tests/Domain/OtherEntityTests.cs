@@ -14,6 +14,69 @@ public class OtherEntityTests
     }
 
     [Fact]
+    public void ApprovalRequest_Resolve_RecordsApproverAndTimestamp()
+    {
+        var a = ApprovalRequest.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        a.Resolve(ApprovalDecision.Approve, "boss@example.com");
+        Assert.Equal("boss@example.com", a.ApproverEmail);
+        Assert.NotNull(a.ResolvedAt);
+    }
+
+    [Fact]
+    public void CompanyPreferences_NegativeThreshold_Throws() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => CompanyPreferences.Create(Guid.NewGuid(), "USD", true, -1m, "ACH"));
+
+    [Fact]
+    public void CompanyPreferences_BadCurrencyOrRail_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => CompanyPreferences.Create(Guid.NewGuid(), "US", true, 1m, "ACH"));
+        Assert.Throws<ArgumentException>(() => CompanyPreferences.Create(Guid.NewGuid(), "USD", true, 1m, " "));
+    }
+
+    [Fact]
+    public void IdempotencyRecord_Begin_BlankKeyOrHash_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => IdempotencyRecord.Begin(Guid.NewGuid(), " ", "h"));
+        Assert.Throws<ArgumentException>(() => IdempotencyRecord.Begin(Guid.NewGuid(), "k", ""));
+    }
+
+    [Fact]
+    public void IdempotencyRecord_Complete_NullBody_BecomesEmpty()
+    {
+        var r = IdempotencyRecord.Begin(Guid.NewGuid(), "k", "h");
+        r.Complete(204, null);
+        Assert.Equal("", r.ResponseBody);
+    }
+
+    [Fact]
+    public void PaymentEvent_IllegalTransitions_Throw()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var e = PaymentEvent.Create(Guid.NewGuid(), Guid.NewGuid(), "T", "q", "{}");
+        Assert.Throws<InvalidOperationException>(() => e.MarkProcessed(now));
+        Assert.Throws<InvalidOperationException>(() => e.Requeue(now));
+        e.MarkDispatched(now);
+        Assert.Throws<InvalidOperationException>(() => e.MarkDispatched(now));
+        e.MarkProcessed(now);
+        Assert.Throws<InvalidOperationException>(() => e.MarkProcessed(now));
+        Assert.Throws<InvalidOperationException>(() => e.Requeue(now));
+        Assert.Throws<InvalidOperationException>(() => e.RecordFailure("x", now));
+    }
+
+    [Fact]
+    public void PaymentEvent_DeadLettered_CannotBeResurrected()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var e = PaymentEvent.Create(Guid.NewGuid(), Guid.NewGuid(), "T", "q", "{}");
+        for (var i = 0; i < PaymentEvent.MaxAttempts; i++) e.RecordFailure("boom", now);
+        Assert.Equal(OutboxStatus.DeadLettered, e.Status);
+        Assert.Throws<InvalidOperationException>(() => e.MarkDispatched(now));
+        Assert.Throws<InvalidOperationException>(() => e.MarkProcessed(now));
+        Assert.Throws<InvalidOperationException>(() => e.Requeue(now));
+        Assert.Throws<InvalidOperationException>(() => e.RecordFailure("x", now));
+    }
+
+    [Fact]
     public void ApprovalRequest_Reject_SetsRejected()
     {
         var a = ApprovalRequest.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
@@ -76,6 +139,7 @@ public class OtherEntityTests
         Assert.Equal(OutboxStatus.Dispatched, e.Status);
         e.Requeue(DateTimeOffset.UtcNow);
         Assert.Equal(OutboxStatus.Pending, e.Status);
+        e.MarkDispatched(DateTimeOffset.UtcNow);
         e.MarkProcessed(DateTimeOffset.UtcNow);
         Assert.Equal(OutboxStatus.Processed, e.Status);
         Assert.NotNull(e.PublishedAt);

@@ -63,6 +63,14 @@ public class Invoice
         ApprovedAt = DateTimeOffset.UtcNow;
     }
 
+    /// <summary>Submitted to Rejected.</summary>
+    public void Reject()
+    {
+        if (Status != InvoiceStatus.Submitted)
+            throw new InvalidOperationException($"Only a Submitted invoice can be rejected (current: {Status}).");
+        Status = InvoiceStatus.Rejected;
+    }
+
     public void MarkPaid()
     {
         if (Status != InvoiceStatus.Approved)
