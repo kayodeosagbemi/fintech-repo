@@ -14,6 +14,8 @@ public interface ICompanyRepository
     Task<Company?> GetByApiKeyHashAsync(string apiKeyHash, CancellationToken ct);
     Task<CompanyPreferences?> GetPreferencesAsync(Guid companyId, CancellationToken ct);
     Task<Company> CreateAsync(Company company, CompanyPreferences preferences, CancellationToken ct);
+    Task<CompanyPreferences?> UpdatePreferencesAsync(Guid companyId, string defaultCurrency, bool requireApproval,
+        decimal threshold, string rail, CancellationToken ct);
 }
 
 public class CompanyRepository(ApDbContext db) : ICompanyRepository
@@ -26,6 +28,16 @@ public class CompanyRepository(ApDbContext db) : ICompanyRepository
 
     public Task<CompanyPreferences?> GetPreferencesAsync(Guid companyId, CancellationToken ct) =>
         db.CompanyPreferences.AsNoTracking().FirstOrDefaultAsync(p => p.CompanyId == companyId, ct);
+
+    public async Task<CompanyPreferences?> UpdatePreferencesAsync(Guid companyId, string defaultCurrency, bool requireApproval,
+        decimal threshold, string rail, CancellationToken ct)
+    {
+        var prefs = await db.CompanyPreferences.FirstOrDefaultAsync(p => p.CompanyId == companyId, ct);
+        if (prefs is null) return null;
+        prefs.Update(defaultCurrency, requireApproval, threshold, rail);
+        await db.SaveChangesAsync(ct);
+        return prefs;
+    }
 
     public async Task<Company> CreateAsync(Company company, CompanyPreferences preferences, CancellationToken ct)
     {

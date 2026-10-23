@@ -29,6 +29,15 @@ public class CompanyPreferences
         };
     }
 
+    public void Update(string defaultCurrency, bool requireApproval, decimal threshold, string rail)
+    {
+        var validated = Create(CompanyId, defaultCurrency, requireApproval, threshold, rail);
+        DefaultCurrency = validated.DefaultCurrency;
+        RequireApprovalAboveThreshold = validated.RequireApprovalAboveThreshold;
+        ApprovalThreshold = validated.ApprovalThreshold;
+        PreferredPaymentRail = validated.PreferredPaymentRail;
+    }
+
     /// <summary>True when a payment of <paramref name="amount"/> must be signed off by a human before processing.</summary>
     public bool RequiresApproval(decimal amount) => RequireApprovalAboveThreshold && amount > ApprovalThreshold;
 }
