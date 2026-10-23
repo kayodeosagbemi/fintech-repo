@@ -41,6 +41,10 @@ public sealed class ApiClient(HttpClient http, ClientSession session, ApiClientO
     public Task<ApiResponse<CompanyResponse>> CreateCompanyAsync(string name, CancellationToken ct = default) =>
         SendAsync<CompanyResponse>(HttpMethod.Post, ApiRoutes.Companies, new CreateCompanyRequest(name), authenticated: false, ct: ct);
 
+    /// <summary>Resolves the company that owns the session's API key (needs no company id).</summary>
+    public Task<ApiResponse<CompanyResponse>> GetCurrentCompanyAsync(CancellationToken ct = default) =>
+        SendAsync<CompanyResponse>(HttpMethod.Get, ApiRoutes.Me, ct: ct);
+
     public Task<ApiResponse<CompanyResponse>> GetCompanyAsync(CancellationToken ct = default) =>
         SendAsync<CompanyResponse>(HttpMethod.Get, CompanyPath(""), ct: ct);
 

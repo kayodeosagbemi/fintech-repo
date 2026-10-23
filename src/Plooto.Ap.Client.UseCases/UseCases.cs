@@ -17,19 +17,30 @@ public sealed record UseCaseResult<T>(bool Success, T? Value, string? Error, int
 
 public interface IConfigureConnectionUseCase
 {
-    /// <summary>Stores the connection details for this session. Company id and key are optional (e.g. before creating a company).</summary>
-    UseCaseResult<ClientSession> Execute(string baseUrl, Guid? companyId, string? apiKey);
+    /// <summary>
+    /// Stores the connection details for this session. If only an API key is given, the company id is discovered from the
+    /// API itself (GET /api/v1/me), so a user never has to look it up.
+    /// </summary>
+    Task<UseCaseResult<ClientSession>> ExecuteAsync(string baseUrl, Guid? companyId, string? apiKey, CancellationToken ct = default);
 }
 
-public sealed class ConfigureConnectionUseCase(ClientSession session) : IConfigureConnectionUseCase
+public sealed class ConfigureConnectionUseCase(ClientSession session, ApiClient api) : IConfigureConnectionUseCase
 {
-    public UseCaseResult<ClientSession> Execute(string baseUrl, Guid? companyId, string? apiKey)
+    public async Task<UseCaseResult<ClientSession>> ExecuteAsync(string baseUrl, Guid? companyId, string? apiKey, CancellationToken ct = default)
     {
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
             return UseCaseResult<ClientSession>.Fail($"'{baseUrl}' is not a valid http(s) URL.");
         session.BaseUrl = baseUrl.TrimEnd('/');
-        session.CompanyId = companyId;
         session.ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
+        session.CompanyId = companyId;
+
+        if (session.ApiKey is not null && companyId is null)
+        {
+            var me = await api.GetCurrentCompanyAsync(ct);
+            if (!me.IsSuccess)
+                return UseCaseResult<ClientSession>.Fail($"Could not resolve the company for that API key: {me.Error}");
+            session.CompanyId = me.Value!.Id;
+        }
         return UseCaseResult<ClientSession>.Ok(session);
     }
 }
@@ -290,7 +301,7 @@ public sealed class ClientSuite
         Session = session ?? new ClientSession();
         Api = new ApiClient(http, Session, options);
         var csv = new InvoiceCsvService();
-        Configure = new ConfigureConnectionUseCase(Session);
+        Configure = new ConfigureConnectionUseCase(Session, Api);
         CreateCompany = new CreateCompanyUseCase(Api, Session);
         ApprovalPolicy = new SetApprovalPolicyUseCase(Api);
         CreateContractor = new CreateContractorUseCase(Api);

@@ -219,14 +219,21 @@ public class UseCaseEndToEndTests(ClientApiFactory factory) : IClassFixture<Clie
     }
 
     [Fact]
-    public async Task ConfigureConnection_ValidatesTheUrl()
+    public async Task ConfigureConnection_ValidatesTheUrl_AndResolvesTheCompanyFromJustAnApiKey()
     {
-        var suite = factory.NewSuite();
-        Assert.False(suite.Configure.Execute("not a url", null, null).Success);
-        var ok = suite.Configure.Execute("https://api.example.com/", Guid.NewGuid(), " key ");
-        Assert.True(ok.Success);
-        Assert.Equal("https://api.example.com", suite.Session.BaseUrl);
-        Assert.Equal("key", suite.Session.ApiKey);
-        await Task.CompletedTask;
+        var original = await SignedUpSuiteAsync(factory);
+        var fresh = factory.NewSuite();
+
+        Assert.False((await fresh.Configure.ExecuteAsync("not a url", null, null)).Success);
+
+        var bad = await fresh.Configure.ExecuteAsync("http://localhost", null, "wrong-key");
+        Assert.False(bad.Success);
+        Assert.Contains("Could not resolve the company", bad.Error);
+
+        var ok = await fresh.Configure.ExecuteAsync("http://localhost/", null, $" {original.Session.ApiKey} ");
+        Assert.True(ok.Success, ok.Error);
+        Assert.Equal(original.Session.CompanyId, fresh.Session.CompanyId);   // discovered, never typed
+        Assert.Equal("http://localhost", fresh.Session.BaseUrl);
+        Assert.True((await fresh.ListInvoices.ExecuteAsync()).Success);
     }
 }

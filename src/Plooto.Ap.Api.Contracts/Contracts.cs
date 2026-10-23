@@ -6,6 +6,7 @@ namespace Plooto.Ap.Api.Contracts;
 public static class ApiRoutes
 {
     public const string Companies = "/api/v1/companies";
+    public const string Me = "/api/v1/me";
     public static string Company(Guid id) => $"{Companies}/{id}";
 }
 

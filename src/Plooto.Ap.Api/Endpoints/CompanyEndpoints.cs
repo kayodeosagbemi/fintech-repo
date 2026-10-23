@@ -1,3 +1,4 @@
+using Plooto.Ap.Api.Auth;
 using Plooto.Ap.Api.Contracts;
 using Plooto.Ap.Domain.Entities;
 using Plooto.Ap.Infrastructure.Repositories;
@@ -23,6 +24,14 @@ internal static class CompanyEndpoints
             // The plaintext key is returned exactly once; only its hash is stored.
             return Results.Created(ApiRoutes.Company(company.Id), company.ToResponse(apiKey));
         }).AllowAnonymous();
+
+        // "Who am I?": lets a client that only holds an API key discover its company id.
+        app.MapGet(ApiRoutes.Me, async (HttpContext http, ICompanyRepository companies, CancellationToken ct) =>
+        {
+            var id = http.User.FindFirst(ApiKeyAuthenticationOptions.CompanyIdClaim)?.Value;
+            var company = Guid.TryParse(id, out var companyId) ? await companies.GetAsync(companyId, ct) : null;
+            return company is null ? Http.NotFound("Company") : Http.Json(company.ToResponse(), StatusCodes.Status200OK);
+        }).RequireAuthorization();
 
         scoped.MapGet("/", async (Guid companyId, ICompanyRepository companies, CancellationToken ct) =>
         {

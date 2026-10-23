@@ -207,3 +207,20 @@ public class InvoiceEndpointsTests(ApiTestFactory factory) : IClassFixture<ApiTe
         Assert.Equal(HttpStatusCode.Conflict, (await s.Client.DeleteAsync(s.Path($"/invoices/{inv.Id}"))).StatusCode);
     }
 }
+
+public class CurrentCompanyEndpointTests(ApiTestFactory factory) : IClassFixture<ApiTestFactory>
+{
+    [Fact]
+    public async Task Me_ReturnsTheCompanyOwningTheKey()
+    {
+        var s = await factory.CreateSessionAsync("Who Am I");
+        var me = await s.Client.GetFromJsonAsync<CompanyResponse>(ApiRoutes.Me);
+        Assert.Equal(s.CompanyId, me!.Id);
+    }
+
+    [Fact]
+    public async Task Me_WithoutAKey_Returns401()
+    {
+        Assert.Equal(HttpStatusCode.Unauthorized, (await factory.CreateClient().GetAsync(ApiRoutes.Me)).StatusCode);
+    }
+}

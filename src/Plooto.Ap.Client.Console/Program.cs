@@ -29,7 +29,7 @@ while (!cts.IsCancellationRequested)
     {
         switch (choice.Trim())
         {
-            case "1": ConfigureConnection(); break;
+            case "1": await ConfigureConnectionAsync(); break;
             case "2": await CreateCompanyAsync(); break;
             case "3": await CreateContractorAsync(); break;
             case "4": await CreateInvoiceAsync(); break;
@@ -53,20 +53,20 @@ while (!cts.IsCancellationRequested)
 
 // ---- Menu handlers (prompt -> use case -> print) --------------------------------------------------------------------------
 
-void ConfigureConnection()
+async Task ConfigureConnectionAsync()
 {
     var url = ui.Ask($"API base URL [{suite.Session.BaseUrl}]");
-    var company = ui.Ask("Company id (blank to keep current)");
+    var company = ui.Ask("Company id (blank = look it up from the API key)");
     var key = ui.Ask("API key (blank to keep current)");
-    Guid? companyId = suite.Session.CompanyId;
+    Guid? companyId = null;   // blank => resolved from the key via GET /api/v1/me
     if (!string.IsNullOrWhiteSpace(company))
     {
         if (!Guid.TryParse(company, out var parsed)) { ui.Error("Company id must be a GUID."); return; }
         companyId = parsed;
     }
-    var result = suite.Configure.Execute(string.IsNullOrWhiteSpace(url) ? suite.Session.BaseUrl : url!,
-        companyId, string.IsNullOrWhiteSpace(key) ? suite.Session.ApiKey : key);
-    if (result.Success) ui.Ok("Connection settings saved for this session.");
+    var result = await suite.Configure.ExecuteAsync(string.IsNullOrWhiteSpace(url) ? suite.Session.BaseUrl : url!,
+        companyId, string.IsNullOrWhiteSpace(key) ? suite.Session.ApiKey : key, cts.Token);
+    if (result.Success) ui.Ok($"Connected as company {result.Value!.CompanyId?.ToString() ?? "(none yet)"}.");
     else ui.Error(result.Error!);
 }
 
