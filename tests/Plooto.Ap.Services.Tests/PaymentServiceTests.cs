@@ -248,6 +248,89 @@ public class PaymentServiceTests
     }
 
     [Fact]
+    public async Task CreatePayment_SameKeyDifferentInvoice_IsConflictAndWritesNothing()
+    {
+        using var h = new ServiceTestHarness();
+        await using var s = h.NewScope();
+        var (co, contractor, inv1) = await ServiceTestHarness.SeedAsync(s.Db);
+        var inv2 = await ServiceTestHarness.AddInvoiceAsync(s.Db, co, contractor, "INV-2");
+        await s.Payments.CreatePaymentAsync(await ValidateAsync(s, co, inv1), "reused", PaymentMethod.Single, null, default);
+
+        var result = await s.Payments.CreatePaymentAsync(await ValidateAsync(s, co, inv2), "reused", PaymentMethod.Single, null, default);
+
+        Assert.Equal(ServiceOutcome.Conflict, result.Outcome);
+        await using var read = h.NewContext();
+        Assert.Equal(1, await read.Payments.CountAsync());
+        Assert.Equal(1, await read.PaymentEvents.CountAsync());
+    }
+
+    [Fact]
+    public async Task ResolveApproval_ConcurrentDoubleResolve_SecondGetsConflict_OnlyOneValidatedEvent()
+    {
+        using var h = new ServiceTestHarness();
+        await using var s1 = h.NewScope();
+        await using var s2 = h.NewScope();
+        var (co, _, inv) = await ServiceTestHarness.SeedAsync(s1.Db, amount: 9000m, requireApproval: true, threshold: 100m);
+        await s1.Payments.CreatePaymentAsync(await ValidateAsync(s1, co, inv), "k1", PaymentMethod.Single, null, default);
+        var approvalId = (await s1.Db.ApprovalRequests.SingleAsync()).Id;
+        // Both scopes load the pending approval/payment before either commits.
+        await s2.Db.ApprovalRequests.SingleAsync();
+        await s2.Db.Payments.SingleAsync();
+
+        var r1 = await s1.Payments.ResolveApprovalAsync(co.Id, approvalId, ApprovalDecision.Approve, null, default);
+        var r2 = await s2.Payments.ResolveApprovalAsync(co.Id, approvalId, ApprovalDecision.Approve, null, default);
+
+        Assert.Equal(ServiceOutcome.Ok, r1.Outcome);
+        Assert.Equal(ServiceOutcome.Conflict, r2.Outcome);
+        await using var read = h.NewContext();
+        Assert.Equal(1, await read.PaymentEvents.CountAsync(e => e.EventType == nameof(PaymentValidated)));
+    }
+
+    [Fact]
+    public async Task BeginProcessing_FromTwoScopes_SecondReturnsNull()
+    {
+        using var h = new ServiceTestHarness();
+        await using var s1 = h.NewScope();
+        await using var s2 = h.NewScope();
+        var (co, _, inv) = await ServiceTestHarness.SeedAsync(s1.Db);
+        var created = await s1.Payments.CreatePaymentAsync(await ValidateAsync(s1, co, inv), "k1", PaymentMethod.Single, null, default);
+        var id = created.Value!.Id;
+        await s2.Db.Payments.SingleAsync();   // loaded as Approved before the first commits
+
+        Assert.NotNull(await s1.Payments.BeginProcessingAsync(id, default));
+        Assert.Null(await s2.Payments.BeginProcessingAsync(id, default));
+    }
+
+    [Fact]
+    public async Task CompletePayment_WhenInvoiceNotApproved_ReturnsNullAndPaymentUnchanged()
+    {
+        using var h = new ServiceTestHarness();
+        await using var s = h.NewScope();
+        var (co, _, inv) = await ServiceTestHarness.SeedAsync(s.Db);
+        var created = await s.Payments.CreatePaymentAsync(await ValidateAsync(s, co, inv), "k1", PaymentMethod.Single, null, default);
+        await s.Payments.BeginProcessingAsync(created.Value!.Id, default);
+        await s.Db.Database.ExecuteSqlRawAsync("UPDATE \"Invoices\" SET \"Status\" = 'Submitted'");
+        s.Db.ChangeTracker.Clear();
+
+        Assert.Null(await s.Payments.CompletePaymentAsync(created.Value.Id, default));
+        await using var read = h.NewContext();
+        Assert.Equal(PaymentStatus.Processing, (await read.Payments.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task FailPayment_FromPending_ReturnsNull()
+    {
+        using var h = new ServiceTestHarness();
+        await using var s = h.NewScope();
+        var (co, _, inv) = await ServiceTestHarness.SeedAsync(s.Db, amount: 9000m, requireApproval: true, threshold: 100m);
+        var created = await s.Payments.CreatePaymentAsync(await ValidateAsync(s, co, inv), "k1", PaymentMethod.Single, null, default);
+
+        Assert.Null(await s.Payments.FailPaymentAsync(created.Value!.Id, "nope", default));
+        await using var read = h.NewContext();
+        Assert.Equal(PaymentStatus.Pending, (await read.Payments.SingleAsync()).Status);
+    }
+
+    [Fact]
     public async Task CreateBatchPayments_ShareBatchId()
     {
         using var h = new ServiceTestHarness();

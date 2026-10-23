@@ -70,6 +70,7 @@ internal class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         b.HasOne<Contractor>().WithMany().HasForeignKey(x => x.ContractorId).OnDelete(DeleteBehavior.Restrict);
         b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
         b.Property(x => x.IdempotencyKey).HasMaxLength(200).IsRequired();
+        b.Property(x => x.Status).IsConcurrencyToken();   // guards racing state transitions
         b.Property(x => x.Rail).HasMaxLength(32);
         b.Property(x => x.FailureReason).HasMaxLength(1000);
         b.HasIndex(x => x.CompanyId);
@@ -117,6 +118,7 @@ internal class ApprovalRequestConfiguration : IEntityTypeConfiguration<ApprovalR
     public void Configure(EntityTypeBuilder<ApprovalRequest> b)
     {
         b.HasKey(x => x.Id);
+        b.Property(x => x.Status).IsConcurrencyToken();   // one-shot resolution
         b.Property(x => x.ApproverEmail).HasMaxLength(320);
         b.HasIndex(x => x.CompanyId);
         b.HasIndex(x => x.PaymentId);
