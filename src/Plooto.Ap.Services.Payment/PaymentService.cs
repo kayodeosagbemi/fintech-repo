@@ -156,7 +156,13 @@ public sealed class PaymentService(ApDbContext db, IEventPublisher events) : IPa
         }
         catch (DbUpdateConcurrencyException)
         {
-            db.ChangeTracker.Clear();
+            // Detach only what this call touched. Clear() would also detach the calling consumer's outbox row.
+            foreach (var entry in db.ChangeTracker.Entries().ToList())
+            {
+                var touched = entry.Entity is PaymentEntity or Invoice or ApprovalRequest
+                    || (entry.Entity is PaymentEvent && entry.State == EntityState.Added);
+                if (touched) entry.State = EntityState.Detached;
+            }
             return false;
         }
     }

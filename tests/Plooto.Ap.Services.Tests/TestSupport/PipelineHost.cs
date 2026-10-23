@@ -36,8 +36,8 @@ public sealed class PipelineHost : IAsyncDisposable
         services.AddApMessaging(o =>
         {
             o.PollInterval = TimeSpan.FromMilliseconds(20);
-            o.SweepInterval = TimeSpan.FromSeconds(1);
-            o.StuckAfter = TimeSpan.FromSeconds(1);
+            o.SweepInterval = TimeSpan.FromSeconds(5);
+            o.StuckAfter = TimeSpan.FromSeconds(5);
             outbox?.Invoke(o);
         });
         services.AddValidationServices();

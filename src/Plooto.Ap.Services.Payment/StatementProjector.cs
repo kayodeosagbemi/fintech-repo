@@ -29,6 +29,8 @@ public sealed class StatementProjector(ChannelRegistry channels, IServiceScopeFa
         if (type is null) return;
 
         var db = services.GetRequiredService<ApDbContext>();
+        // Duplicate delivery is handled by this existence check; the save happens in the base class, so a unique-index
+        // race cannot be caught here and simply fails the attempt, which is retried (and then hits this check).
         if (await db.StatementLines.AnyAsync(l => l.PaymentId == evt.PaymentId && l.Type == type, ct)) return;
 
         var payment = await db.Payments.FirstOrDefaultAsync(p => p.CompanyId == evt.CompanyId && p.Id == evt.PaymentId, ct);

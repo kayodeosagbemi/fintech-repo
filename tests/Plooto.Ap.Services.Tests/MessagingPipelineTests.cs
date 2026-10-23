@@ -134,6 +134,39 @@ public class QueueConsumerTests
         Assert.Equal(1, await host.QueryAsync(db => db.PaymentEvents.CountAsync()));   // "Junk" rows never persisted
     }
 
+    private sealed class PoisonFirstConsumer(ChannelRegistry c, IServiceScopeFactory s, long poisonId)
+        : QueueConsumer("test-queue", c, s, NullLogger.Instance)
+    {
+        protected override async Task HandleAsync(IServiceProvider services, PaymentEvent evt, CancellationToken ct)
+        {
+            if (evt.Id != poisonId) return;
+            // Failure path where the row vanishes under us: the old code threw out of ProcessAsync and killed the loop.
+            await services.GetRequiredService<ApDbContext>().Database.ExecuteSqlRawAsync("DELETE FROM PaymentEvents WHERE Id = {0}", evt.Id);
+            throw new InvalidOperationException("poison");
+        }
+    }
+
+    [Fact]
+    public async Task ConsumerLoop_SurvivesAFailingSignal_AndProcessesTheNext()
+    {
+        await using var host = new PipelineHost();
+        var registry = host.Services.GetRequiredService<ChannelRegistry>();
+        var first = await InsertDispatchedRowAsync(host);
+        var second = await InsertDispatchedRowAsync(host);
+        var consumer = new PoisonFirstConsumer(registry, host.Services.GetRequiredService<IServiceScopeFactory>(), first);
+
+        await consumer.StartAsync(CancellationToken.None);
+        try
+        {
+            await registry.SendAsync("test-queue", new OutboxSignal(first), default);
+            await registry.SendAsync("test-queue", new OutboxSignal(second), default);
+
+            Assert.True(await host.WaitUntilAsync(async db =>
+                (await db.PaymentEvents.SingleAsync(e => e.Id == second)).Status == OutboxStatus.Processed));
+        }
+        finally { await consumer.StopAsync(CancellationToken.None); }
+    }
+
     [Fact]
     public async Task DuplicateOrUnknownSignal_IsIgnored()
     {
@@ -196,16 +229,83 @@ public class PaymentProcessorTests
     }
 
     [Fact]
-    public async Task HungRail_TimesOut_AndPaymentIsNotStrandedInProcessing()
+    public async Task HungRail_RetriesWithBackoff_AndFailsOnlyOnTheFinalAttempt()
     {
-        var (host, _, processor, signal) = await ArrangeAsync(250.66m, railTimeout: TimeSpan.FromMilliseconds(150));
+        var (host, _, processor, signal) = await ArrangeAsync(250.66m, railTimeout: TimeSpan.FromMilliseconds(100));
+        await using var _ = host;
+
+        for (var attempt = 1; attempt <= PaymentEvent.MaxAttempts; attempt++)
+        {
+            await processor.ProcessAsync(signal, default);
+            var p = await host.QueryAsync(db => db.Payments.SingleAsync());
+            var row = await host.QueryAsync(db => db.PaymentEvents.SingleAsync(e => e.Id == signal.EventId));
+            if (attempt < PaymentEvent.MaxAttempts)
+            {
+                Assert.Equal(attempt, row.AttemptCount);
+                Assert.Equal(PaymentStatus.Processing, p.Status);
+                Assert.Equal(OutboxStatus.Pending, row.Status);
+                await host.QueryAsync(db => db.Database.ExecuteSqlRawAsync("UPDATE PaymentEvents SET Status = 'Dispatched' WHERE Id = {0}", signal.EventId));
+            }
+            else
+            {
+                Assert.Equal(OutboxStatus.Processed, row.Status);   // final attempt fails the payment and acks the event
+                Assert.Equal(PaymentStatus.Failed, p.Status);
+                Assert.Contains("timed out", p.FailureReason);
+            }
+        }
+    }
+
+    private sealed class StubPaymentService(IPaymentService inner, bool completeFirst) : IPaymentService
+    {
+        public Task<ServiceResult<Domain.Entities.Payment>> CreatePaymentAsync(ValidatedPaymentRequest r, string k, PaymentMethod m, Guid? b, CancellationToken ct) =>
+            inner.CreatePaymentAsync(r, k, m, b, ct);
+        public Task<Domain.Entities.Payment?> FindByIdempotencyKeyAsync(Guid c, string k, CancellationToken ct) => inner.FindByIdempotencyKeyAsync(c, k, ct);
+        public Task<ServiceResult<Domain.Entities.Payment>> ResolveApprovalAsync(Guid c, Guid a, ApprovalDecision d, string? e, CancellationToken ct) =>
+            inner.ResolveApprovalAsync(c, a, d, e, ct);
+        public Task<Domain.Entities.Payment?> BeginProcessingAsync(Guid id, CancellationToken ct) => inner.BeginProcessingAsync(id, ct);
+        public async Task<Domain.Entities.Payment?> CompletePaymentAsync(Guid id, CancellationToken ct)
+        {
+            if (completeFirst) await inner.CompletePaymentAsync(id, ct);
+            return null;   // simulates "not applicable / lost the race"
+        }
+        public Task<Domain.Entities.Payment?> FailPaymentAsync(Guid id, string reason, CancellationToken ct) => inner.FailPaymentAsync(id, reason, ct);
+    }
+
+    private static async Task<(PipelineHost Host, PaymentProcessor Processor, OutboxSignal Signal)> ArrangeWithNullCompleteAsync(bool completeFirst)
+    {
+        var host = new PipelineHost(overrides: s => s.AddScoped<IPaymentService>(sp =>
+            new StubPaymentService(ActivatorUtilities.CreateInstance<PaymentService>(sp), completeFirst)));
+        var (co, _, inv) = await host.SeedAsync(amount: 100m);
+        await host.CreatePaymentAsync(co.Id, inv.Id, "k1");
+        await host.Services.GetRequiredService<OutboxDispatcher>().DispatchPendingAsync(default);
+        var evtId = (await host.QueryAsync(db => db.PaymentEvents.SingleAsync())).Id;
+        return (host, host.Services.GetRequiredService<PaymentProcessor>(), new OutboxSignal(evtId));
+    }
+
+    [Fact]
+    public async Task NullCompleteResult_WhilePaymentStillProcessing_IsRetried_NotSilentlyAcknowledged()
+    {
+        var (host, processor, signal) = await ArrangeWithNullCompleteAsync(completeFirst: false);
         await using var _ = host;
 
         await processor.ProcessAsync(signal, default);
 
-        var p = await host.QueryAsync(db => db.Payments.SingleAsync());
-        Assert.Equal(PaymentStatus.Failed, p.Status);
-        Assert.Contains("timed out", p.FailureReason);
+        var row = await host.QueryAsync(db => db.PaymentEvents.SingleAsync(e => e.Id == signal.EventId));
+        Assert.Equal(OutboxStatus.Pending, row.Status);
+        Assert.Equal(1, row.AttemptCount);
+        Assert.Equal(PaymentStatus.Processing, (await host.QueryAsync(db => db.Payments.SingleAsync())).Status);
+    }
+
+    [Fact]
+    public async Task NullCompleteResult_WhenPaymentAlreadyTerminal_IsTreatedAsDuplicate()
+    {
+        var (host, processor, signal) = await ArrangeWithNullCompleteAsync(completeFirst: true);
+        await using var _ = host;
+
+        await processor.ProcessAsync(signal, default);
+
+        Assert.Equal(OutboxStatus.Processed, (await host.QueryAsync(db => db.PaymentEvents.SingleAsync(e => e.Id == signal.EventId))).Status);
+        Assert.Equal(PaymentStatus.Completed, (await host.QueryAsync(db => db.Payments.SingleAsync())).Status);
     }
 
     [Fact]
@@ -294,10 +394,15 @@ public class EndToEndPipelineTests
         await host.CreatePaymentAsync(co.Id, inv.Id, "e2e-reject");
         var approvalId = (await host.QueryAsync(db => db.ApprovalRequests.SingleAsync())).Id;
 
+        // The ApprovalRequested notification must have drained first, so the final wait cannot pass vacuously.
+        Assert.True(await host.WaitUntilAsync(async db =>
+            await db.PaymentEvents.AnyAsync(e => e.EventType == nameof(ApprovalRequested) && e.Status == OutboxStatus.Processed)));
+
         await host.WithScopeAsync(sp => sp.GetRequiredService<IPaymentService>()
             .ResolveApprovalAsync(co.Id, approvalId, ApprovalDecision.Reject, "boss@example.com", default));
 
         Assert.True(await host.WaitUntilAsync(async db =>
+            await db.PaymentEvents.AnyAsync(e => e.EventType == nameof(PaymentNotification)) &&
             !await db.PaymentEvents.AnyAsync(e => e.Status == OutboxStatus.Pending || e.Status == OutboxStatus.Dispatched)));
         Assert.Equal(PaymentStatus.Cancelled, (await host.QueryAsync(db => db.Payments.SingleAsync())).Status);
         Assert.Equal(0, await host.QueryAsync(db => db.StatementLines.CountAsync()));

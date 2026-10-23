@@ -96,6 +96,7 @@ internal class PaymentEventConfiguration : IEntityTypeConfiguration<PaymentEvent
         b.Property(x => x.QueueName).HasMaxLength(100).IsRequired();
         b.Property(x => x.PayloadJson).IsRequired();
         b.Property(x => x.LastError).HasMaxLength(1000);
+        b.Property(x => x.Status).IsConcurrencyToken();   // a slow consumer's MarkProcessed must not overwrite a sweep's Requeue
         b.HasIndex(x => x.PaymentId);
         // Dispatcher scan: only rows still waiting to be relayed.
         b.HasIndex(x => x.NextAttemptAt).HasFilter("\"Status\" = 'Pending'").HasDatabaseName("IX_PaymentEvents_Pending");

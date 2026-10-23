@@ -15,6 +15,11 @@ public sealed class PaymentProcessorOptions
 }
 
 /// <summary>Consumer half of the "Payment Service": takes cleared payments off validated-payments and sends them to the rail.</summary>
+/// <remarks>
+/// Known gap: if a processing event is dead-lettered (all attempts exhausted by repeated non-rail errors, e.g. a
+/// persistent DB fault) the payment is left in Processing and needs operator reconciliation. A reconciliation sweep is
+/// out of scope for this take-home and is listed in DESIGN.md.
+/// </remarks>
 public sealed class PaymentProcessor(
     ChannelRegistry channels,
     IServiceScopeFactory scopes,
@@ -51,27 +56,43 @@ public sealed class PaymentProcessor(
         }
         else
         {
+            var timeoutLimit = options.Value.RailTimeout;
             try
             {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                timeout.CancelAfter(options.Value.RailTimeout);
+                // WaitAsync enforces the timeout even if the rail ignores the token, so it can never block the reader.
                 result = await rail.SendAsync(new PaymentRailRequest(payment.Id, payment.Rail ?? "ACH", payment.Amount,
-                    payment.Currency, contractor.PayoutAccountRef), timeout.Token);
+                    payment.Currency, contractor.PayoutAccountRef), ct).WaitAsync(timeoutLimit, ct);
             }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                result = PaymentRailResult.Fail($"Payment rail timed out after {options.Value.RailTimeout.TotalSeconds:0.#}s");
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogWarning(ex, "Payment rail threw for payment {PaymentId}.", payment.Id);
-                result = PaymentRailResult.Fail($"Payment rail error: {ex.Message}");
+                // Rail timeout or transient error: the transfer MAY have succeeded, so do not fail the payment yet.
+                // Rethrow so the outbox backoff retries (the rail call is idempotent on PaymentId); fail only on the final attempt.
+                var reason = ex is TimeoutException
+                    ? $"Payment rail timed out after {evt.AttemptCount + 1} attempts"
+                    : $"Payment rail error after {evt.AttemptCount + 1} attempts: {ex.Message}";
+                if (evt.AttemptCount + 1 < PaymentEvent.MaxAttempts)
+                {
+                    logger.LogWarning(ex, "Payment rail unavailable for payment {PaymentId} (attempt {Attempt}); will retry.",
+                        payment.Id, evt.AttemptCount + 1);
+                    throw;
+                }
+                logger.LogError(ex, "Payment rail exhausted retries for payment {PaymentId}; failing it.", payment.Id);
+                result = PaymentRailResult.Fail(reason);
             }
         }
 
-        if (result.Success)
-            await service.CompletePaymentAsync(payment.Id, ct);
-        else
-            await service.FailPaymentAsync(payment.Id, result.FailureReason ?? "Payment rail failed", ct);
+        var outcome = result.Success
+            ? await service.CompletePaymentAsync(payment.Id, ct)
+            : await service.FailPaymentAsync(payment.Id, result.FailureReason ?? "Payment rail failed", ct);
+        if (outcome is not null) return;
+
+        // Null means "not applicable or lost a race". Only a terminal payment makes that a harmless duplicate.
+        var current = await payments.GetAsync(evt.CompanyId, evt.PaymentId, ct);
+        if (current is not null && current.Status is PaymentStatus.Completed or PaymentStatus.Failed or PaymentStatus.Cancelled)
+            return;
+        throw new InvalidOperationException(
+            $"Could not record rail outcome for payment {evt.PaymentId} (status {current?.Status.ToString() ?? "missing"}); will retry.");
     }
+
+    // A dead-lettered processing event is logged at Error by QueueConsumer; see the Known gap remark on this class.
 }
