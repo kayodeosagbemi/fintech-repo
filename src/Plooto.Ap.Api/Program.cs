@@ -32,6 +32,7 @@ builder.Services.AddPaymentServices(p => builder.Configuration.GetSection("Payme
     r => builder.Configuration.GetSection("SimulatedRail").Bind(r));
 builder.Services.AddNotificationServices();
 builder.Services.AddScoped<PaymentOrchestrator>();
+builder.Services.AddScoped<IdempotencyFilter>();
 
 builder.Services
     .AddAuthentication(ApiKeyAuthenticationOptions.Scheme)

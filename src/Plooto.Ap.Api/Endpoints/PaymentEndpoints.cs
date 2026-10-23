@@ -1,4 +1,5 @@
 using Plooto.Ap.Api.Contracts;
+using Plooto.Ap.Api.Middleware;
 using Plooto.Ap.Domain.Common;
 using Plooto.Ap.Domain.Entities;
 using Plooto.Ap.Infrastructure.Repositories;
@@ -22,7 +23,7 @@ internal static class PaymentEndpoints
             if (status == StatusCodes.Status201Created)
                 http.Response.Headers.Location = $"{ApiRoutes.Company(companyId)}/payments/{result.Value!.Id}";
             return Http.Json(result.Value!.ToResponse(), status);
-        });
+        }).AddEndpointFilter<IdempotencyFilter>();
 
         g.MapPost("/batch", async (Guid companyId, CreateBatchPaymentRequest request, HttpContext http, PaymentOrchestrator orchestrator, CancellationToken ct) =>
         {
@@ -34,7 +35,7 @@ internal static class PaymentEndpoints
             var key = http.Request.Headers[HeaderNames.IdempotencyKey].ToString();
             var response = await orchestrator.CreateBatchAsync(companyId, request.Items.Select(i => i.InvoiceId).ToList(), key, ct);
             return Http.Json(response, StatusCodes.Status207MultiStatus);
-        });
+        }).AddEndpointFilter<IdempotencyFilter>();
 
         g.MapGet("/{paymentId:guid}", async (Guid companyId, Guid paymentId, IPaymentRepository payments, IInvoiceRepository invoices,
             IContractorRepository contractors, IApprovalRepository approvals, CancellationToken ct) =>
