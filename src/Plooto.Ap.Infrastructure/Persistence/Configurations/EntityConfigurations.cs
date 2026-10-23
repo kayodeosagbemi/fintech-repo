@@ -35,7 +35,7 @@ internal class ContractorConfiguration : IEntityTypeConfiguration<Contractor>
     public void Configure(EntityTypeBuilder<Contractor> b)
     {
         b.HasKey(x => x.Id);
-        b.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId);
+        b.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
         b.Property(x => x.Name).HasMaxLength(200).IsRequired();
         b.Property(x => x.Email).HasMaxLength(320).IsRequired();
         b.Property(x => x.PayoutAccountRef).HasMaxLength(200).IsRequired();
@@ -49,8 +49,8 @@ internal class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
     public void Configure(EntityTypeBuilder<Invoice> b)
     {
         b.HasKey(x => x.Id);
-        b.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId);
-        b.HasOne<Contractor>().WithMany().HasForeignKey(x => x.ContractorId);
+        b.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Contractor>().WithMany().HasForeignKey(x => x.ContractorId).OnDelete(DeleteBehavior.Restrict);
         b.Property(x => x.InvoiceNumber).HasMaxLength(100).IsRequired();
         b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
         b.Property(x => x.Description).HasMaxLength(1000);
@@ -65,9 +65,9 @@ internal class PaymentConfiguration : IEntityTypeConfiguration<Payment>
     public void Configure(EntityTypeBuilder<Payment> b)
     {
         b.HasKey(x => x.Id);
-        b.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId);
-        b.HasOne<Invoice>().WithMany().HasForeignKey(x => x.InvoiceId);
-        b.HasOne<Contractor>().WithMany().HasForeignKey(x => x.ContractorId);
+        b.HasOne<Company>().WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Invoice>().WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Contractor>().WithMany().HasForeignKey(x => x.ContractorId).OnDelete(DeleteBehavior.Restrict);
         b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
         b.Property(x => x.IdempotencyKey).HasMaxLength(200).IsRequired();
         b.Property(x => x.Rail).HasMaxLength(32);

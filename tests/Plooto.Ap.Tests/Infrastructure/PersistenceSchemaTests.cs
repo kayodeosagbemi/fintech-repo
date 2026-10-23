@@ -68,4 +68,23 @@ public class PersistenceSchemaTests
         Assert.Equal(6, await ctx.Contractors.CountAsync());
         Assert.Equal(6, await ctx.Invoices.CountAsync());
     }
+
+    [Fact]
+    public async Task DeletingInvoiceWithPayments_IsBlockedByForeignKey()
+    {
+        using var db = new SqliteTestDb();
+        await using var ctx = db.CreateContext();
+        var company = await TestData.AddCompanyAsync(ctx);
+        var contractor = await TestData.AddContractorAsync(ctx, company.Id);
+        var invoice = await TestData.AddInvoiceAsync(ctx, company.Id, contractor.Id);
+        var payment = Payment.Create(company.Id, invoice.Id, contractor.Id, 100m, "USD", default, "idem-1");
+        ctx.Payments.Add(payment);
+        await ctx.SaveChangesAsync();
+
+        await Assert.ThrowsAnyAsync<Exception>(() => ctx.Database.ExecuteSqlRawAsync("DELETE FROM Invoices"));
+        await Assert.ThrowsAnyAsync<Exception>(() => ctx.Database.ExecuteSqlRawAsync("DELETE FROM Companies"));
+
+        await using var read = db.CreateContext();
+        Assert.True(await read.Payments.AnyAsync(p => p.Id == payment.Id));
+    }
 }

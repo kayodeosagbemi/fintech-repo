@@ -11,7 +11,7 @@ using Plooto.Ap.Infrastructure.Persistence;
 namespace Plooto.Ap.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApDbContext))]
-    [Migration("20261023202846_InitialCreate")]
+    [Migration("20261023203346_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -448,7 +448,7 @@ namespace Plooto.Ap.Infrastructure.Persistence.Migrations
                     b.HasOne("Plooto.Ap.Domain.Entities.Company", null)
                         .WithMany()
                         .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
@@ -457,13 +457,13 @@ namespace Plooto.Ap.Infrastructure.Persistence.Migrations
                     b.HasOne("Plooto.Ap.Domain.Entities.Company", null)
                         .WithMany()
                         .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Plooto.Ap.Domain.Entities.Contractor", null)
                         .WithMany()
                         .HasForeignKey("ContractorId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
@@ -472,19 +472,19 @@ namespace Plooto.Ap.Infrastructure.Persistence.Migrations
                     b.HasOne("Plooto.Ap.Domain.Entities.Company", null)
                         .WithMany()
                         .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Plooto.Ap.Domain.Entities.Contractor", null)
                         .WithMany()
                         .HasForeignKey("ContractorId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Plooto.Ap.Domain.Entities.Invoice", null)
                         .WithMany()
                         .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 #pragma warning restore 612, 618

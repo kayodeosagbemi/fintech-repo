@@ -4,7 +4,8 @@ using Plooto.Ap.Infrastructure.Security;
 
 namespace Plooto.Ap.Infrastructure.Persistence;
 
-/// <summary>Development-only sample data. Idempotent: does nothing if any company already exists.</summary>
+/// <summary>Development-only sample data. Idempotent: does nothing if any company already exists.
+/// Must only be invoked when the host environment is Development (Program.cs enforces this).</summary>
 public static class DevSeeder
 {
     // Fixed, obviously-fake keys so a fresh checkout can call the API immediately. Dev only.
