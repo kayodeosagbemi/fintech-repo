@@ -1,3 +1,4 @@
+using Plooto.Ap.Domain.Common;
 namespace Plooto.Ap.Domain.Entities;
 
 public enum IdempotencyStatus { InProgress, Completed }
@@ -32,7 +33,7 @@ public class IdempotencyRecord
 
     public void Complete(int statusCode, string? body)
     {
-        if (Status == IdempotencyStatus.Completed) throw new InvalidOperationException("Idempotency record already completed.");
+        if (Status == IdempotencyStatus.Completed) throw new DomainRuleException("Idempotency record already completed.");
         Status = IdempotencyStatus.Completed;
         ResponseStatusCode = statusCode;
         ResponseBody = body ?? "";

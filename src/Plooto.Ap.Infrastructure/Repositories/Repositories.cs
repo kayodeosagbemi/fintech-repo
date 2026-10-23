@@ -119,7 +119,8 @@ public class InvoiceRepository(ApDbContext db) : IInvoiceRepository
         var q = db.Invoices.AsNoTracking().Where(i => i.CompanyId == companyId);
         if (status is { } s) q = q.Where(i => i.Status == s);
         if (contractorId is { } c) q = q.Where(i => i.ContractorId == c);
-        return await q.OrderBy(i => i.CreatedAt).ThenBy(i => i.InvoiceNumber).ToListAsync(ct);
+        // Unbounded lists are a DoS/latency risk: results are capped at 500 rows (no paging yet).
+        return await q.OrderBy(i => i.CreatedAt).ThenBy(i => i.InvoiceNumber).Take(500).ToListAsync(ct);
     }
 
     public async Task<Invoice> CreateAsync(Invoice invoice, CancellationToken ct)
@@ -164,13 +165,14 @@ public class PaymentRepository(ApDbContext db) : IPaymentRepository
         if (contractorId is { } c) q = q.Where(p => p.ContractorId == c);
         if (from is { } f) q = q.Where(p => p.CreatedAt >= f);
         if (to is { } t) q = q.Where(p => p.CreatedAt <= t);
-        return await q.OrderBy(p => p.CreatedAt).ThenBy(p => p.Id).ToListAsync(ct);
+        // Capped at 500 rows (see InvoiceRepository.ListAsync).
+        return await q.OrderBy(p => p.CreatedAt).ThenBy(p => p.Id).Take(500).ToListAsync(ct);
     }
 
     public async Task<IReadOnlyList<Payment>> ListByBatchAsync(Guid companyId, Guid batchId, CancellationToken ct) =>
         await db.Payments.AsNoTracking()
             .Where(p => p.CompanyId == companyId && p.BatchId == batchId)
-            .OrderBy(p => p.CreatedAt).ToListAsync(ct);
+            .OrderBy(p => p.CreatedAt).Take(500).ToListAsync(ct);
 
     public async Task<Payment> CreateAsync(Payment payment, CancellationToken ct)
     {
@@ -190,6 +192,11 @@ public interface IIdempotencyStore
     Task CompleteAsync(Guid companyId, string key, int statusCode, string body, CancellationToken ct);
     /// <summary>Releases an InProgress claim after an unexpected failure so the client can retry the same key.</summary>
     Task AbandonAsync(Guid companyId, string key, CancellationToken ct);
+    /// <summary>
+    /// Atomically re-claims an InProgress record whose owner is presumed dead (claimed at least <paramref name="olderThan"/>
+    /// ago). Exactly one concurrent caller gets true; a fresh or Completed record is never taken.
+    /// </summary>
+    Task<bool> TryTakeOverStaleAsync(Guid companyId, string key, string requestHash, TimeSpan olderThan, CancellationToken ct);
 }
 
 public class IdempotencyStore(ApDbContext db) : IIdempotencyStore
@@ -214,6 +221,19 @@ public class IdempotencyStore(ApDbContext db) : IIdempotencyStore
         var record = await db.IdempotencyRecords.FirstAsync(r => r.CompanyId == companyId && r.Key == key, ct);
         record.Complete(statusCode, body);
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<bool> TryTakeOverStaleAsync(Guid companyId, string key, string requestHash, TimeSpan olderThan, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var nowTicks = now.UtcTicks;
+        var cutoffTicks = (now - olderThan).UtcTicks;
+        var status = nameof(IdempotencyStatus.InProgress);
+        // Compare-and-set on CreatedAt: refreshing it makes the record fresh again, so a second racer matches 0 rows.
+        var updated = await db.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE IdempotencyRecords SET CreatedAt = {nowTicks}, RequestHash = {requestHash}
+            WHERE CompanyId = {companyId} AND Key = {key} AND Status = {status} AND CreatedAt <= {cutoffTicks}", ct);
+        return updated == 1;
     }
 
     public async Task AbandonAsync(Guid companyId, string key, CancellationToken ct) =>

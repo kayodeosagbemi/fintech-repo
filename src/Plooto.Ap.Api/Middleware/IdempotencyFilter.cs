@@ -16,7 +16,16 @@ namespace Plooto.Ap.Api.Middleware;
 /// </summary>
 public sealed class IdempotencyFilter(IIdempotencyStore store) : IEndpointFilter
 {
-    private const int MaxKeyLength = 200;
+    /// <summary>
+    /// Batch item keys are "{key}:{invoiceId}" and must fit Payment.IdempotencyKey (200): 128 + 1 + 36 = 165.
+    /// </summary>
+    public const int MaxKeyLength = 128;
+    /// <summary>An InProgress claim older than this is presumed orphaned by a dead process and may be taken over.</summary>
+    public static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(30);
+    /// <summary>HttpContext.Items key holding the trimmed, validated Idempotency-Key for the endpoint to use.</summary>
+    public const string KeyItem = "idempotency:key";
+    /// <summary>Set by an endpoint to ask the filter to release (not cache) an otherwise-2xx response.</summary>
+    public const string SkipCacheItem = "idempotency:skip-cache";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
@@ -29,12 +38,14 @@ public sealed class IdempotencyFilter(IIdempotencyStore store) : IEndpointFilter
             return Http.Error(StatusCodes.Status400BadRequest, $"The {HeaderNames.IdempotencyKey} header is required on this endpoint.");
         if (key.Length > MaxKeyLength)
             return Http.Error(StatusCodes.Status400BadRequest, $"{HeaderNames.IdempotencyKey} must be at most {MaxKeyLength} characters.");
+        http.Items[KeyItem] = key;
         if (!Guid.TryParse(http.Request.RouteValues["companyId"]?.ToString(), out var companyId))
             return await next(context);
 
         var requestHash = HashRequest(http, context.Arguments);
 
-        if (!await store.TryBeginAsync(companyId, key, requestHash, ct))
+        var claimed = await store.TryBeginAsync(companyId, key, requestHash, ct);
+        if (!claimed)
         {
             var existing = await store.GetAsync(companyId, key, ct);
             if (existing is null)   // released between our failed insert and the read: let the client retry
@@ -46,7 +57,12 @@ public sealed class IdempotencyFilter(IIdempotencyStore store) : IEndpointFilter
                 http.Response.Headers["Idempotent-Replayed"] = "true";
                 return Results.Content(existing.ResponseBody, "application/json", Encoding.UTF8, existing.ResponseStatusCode);
             }
-            return RetryLater(http, "A request with this Idempotency-Key is still in progress.");
+            // InProgress: if its owner died the record would block this key forever, so a stale one is taken over.
+            // Safe because the orchestrator's replay-by-idempotency-key check prevents a double payment.
+            var stale = DateTimeOffset.UtcNow - existing.CreatedAt >= StaleAfter
+                && await store.TryTakeOverStaleAsync(companyId, key, requestHash, StaleAfter, ct);
+            if (!stale)
+                return RetryLater(http, "A request with this Idempotency-Key is still in progress.");
         }
 
         object? result;
@@ -60,7 +76,8 @@ public sealed class IdempotencyFilter(IIdempotencyStore store) : IEndpointFilter
             throw;
         }
 
-        if (result is IStatusCodeHttpResult { StatusCode: >= 200 and < 300 and var status } && result is IValueHttpResult { Value: { } value })
+        var skipCache = http.Items.TryGetValue(SkipCacheItem, out var skip) && skip is true;
+        if (!skipCache && result is IStatusCodeHttpResult { StatusCode: >= 200 and < 300 and var status } && result is IValueHttpResult { Value: { } value })
         {
             var body = JsonSerializer.Serialize(value, value.GetType(), JsonOptions);
             await store.CompleteAsync(companyId, key, status, body, CancellationToken.None);

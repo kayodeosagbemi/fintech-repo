@@ -1,3 +1,4 @@
+using Plooto.Ap.Domain.Common;
 namespace Plooto.Ap.Domain.Entities;
 
 public enum InvoiceStatus { Draft, Submitted, Approved, Rejected, Paid, Void }
@@ -40,7 +41,7 @@ public class Invoice
     public void Update(decimal amount, string currency, DateOnly dueDate, string? description)
     {
         if (Status is not (InvoiceStatus.Draft or InvoiceStatus.Submitted))
-            throw new InvalidOperationException($"Invoice in status {Status} cannot be edited.");
+            throw new DomainRuleException($"Invoice in status {Status} cannot be edited.");
         SetDetails(amount, currency, dueDate, description);
     }
 
@@ -58,7 +59,7 @@ public class Invoice
     public void Approve()
     {
         if (Status != InvoiceStatus.Submitted)
-            throw new InvalidOperationException($"Only a Submitted invoice can be approved (current: {Status}).");
+            throw new DomainRuleException($"Only a Submitted invoice can be approved (current: {Status}).");
         Status = InvoiceStatus.Approved;
         ApprovedAt = DateTimeOffset.UtcNow;
     }
@@ -67,14 +68,14 @@ public class Invoice
     public void Reject()
     {
         if (Status != InvoiceStatus.Submitted)
-            throw new InvalidOperationException($"Only a Submitted invoice can be rejected (current: {Status}).");
+            throw new DomainRuleException($"Only a Submitted invoice can be rejected (current: {Status}).");
         Status = InvoiceStatus.Rejected;
     }
 
     public void MarkPaid()
     {
         if (Status != InvoiceStatus.Approved)
-            throw new InvalidOperationException($"Only an Approved invoice can be marked paid (current: {Status}).");
+            throw new DomainRuleException($"Only an Approved invoice can be marked paid (current: {Status}).");
         Status = InvoiceStatus.Paid;
     }
 
@@ -82,7 +83,7 @@ public class Invoice
     public void Void()
     {
         if (Status is InvoiceStatus.Paid or InvoiceStatus.Void)
-            throw new InvalidOperationException($"Invoice in status {Status} cannot be voided.");
+            throw new DomainRuleException($"Invoice in status {Status} cannot be voided.");
         Status = InvoiceStatus.Void;
     }
 }

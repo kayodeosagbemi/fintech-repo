@@ -15,7 +15,9 @@ internal static class PaymentEndpoints
 
         g.MapPost("/", async (Guid companyId, CreatePaymentRequest request, HttpContext http, PaymentOrchestrator orchestrator, CancellationToken ct) =>
         {
-            var key = http.Request.Headers[HeaderNames.IdempotencyKey].ToString();
+            if (request is null || request.InvoiceId == Guid.Empty)
+                return Http.Error(StatusCodes.Status400BadRequest, "InvoiceId is required.");
+            var key = (string)http.Items[IdempotencyFilter.KeyItem]!;   // trimmed + validated by the filter
             var result = await orchestrator.CreateAsync(companyId, request.InvoiceId, key, PaymentMethod.Single, null, ct);
             if (!result.IsSuccess) return Http.Error(Http.StatusFor(result.Outcome), result.Error!);
 
@@ -27,13 +29,19 @@ internal static class PaymentEndpoints
 
         g.MapPost("/batch", async (Guid companyId, CreateBatchPaymentRequest request, HttpContext http, PaymentOrchestrator orchestrator, CancellationToken ct) =>
         {
-            if (request.Items is null || request.Items.Count == 0)
+            if (request?.Items is null || request.Items.Count == 0)
                 return Http.Error(StatusCodes.Status400BadRequest, "A batch needs at least one item.");
             if (request.Items.Count > PaymentOrchestrator.MaxBatchSize)
                 return Http.Error(StatusCodes.Status400BadRequest, $"A batch can contain at most {PaymentOrchestrator.MaxBatchSize} items.");
 
-            var key = http.Request.Headers[HeaderNames.IdempotencyKey].ToString();
+            if (request.Items.Any(i => i is null || i.InvoiceId == Guid.Empty))
+                return Http.Error(StatusCodes.Status400BadRequest, "Every batch item needs a non-empty InvoiceId.");
+
+            var key = (string)http.Items[IdempotencyFilter.KeyItem]!;
             var response = await orchestrator.CreateBatchAsync(companyId, request.Items.Select(i => i.InvoiceId).ToList(), key, ct);
+            // Nothing created or replayed: don't cache the all-rejected outcome, so the client can fix and retry the same key.
+            if (!response.Results.Any(r => r.Outcome is "Created" or "Replayed"))
+                http.Items[IdempotencyFilter.SkipCacheItem] = true;
             return Http.Json(response, StatusCodes.Status207MultiStatus);
         }).AddEndpointFilter<IdempotencyFilter>();
 

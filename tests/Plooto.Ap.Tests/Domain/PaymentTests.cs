@@ -1,3 +1,4 @@
+using Plooto.Ap.Domain.Common;
 using Plooto.Ap.Domain.Entities;
 
 namespace Plooto.Ap.Tests.Domain;
@@ -32,7 +33,7 @@ public class PaymentTests
     {
         var p = NewPayment();
         p.Approve();
-        Assert.Throws<InvalidOperationException>(p.Approve);
+        Assert.Throws<DomainRuleException>(p.Approve);
     }
 
     [Fact]
@@ -49,16 +50,16 @@ public class PaymentTests
     {
         var p = NewPayment();
         p.Approve();
-        Assert.Throws<InvalidOperationException>(() => p.MarkCancelled("x"));
+        Assert.Throws<DomainRuleException>(() => p.MarkCancelled("x"));
     }
 
     [Fact]
     public void MarkProcessing_FromPending_Throws() =>
-        Assert.Throws<InvalidOperationException>(NewPayment().MarkProcessing);
+        Assert.Throws<DomainRuleException>(NewPayment().MarkProcessing);
 
     [Fact]
     public void MarkCompleted_FromPending_Throws() =>
-        Assert.Throws<InvalidOperationException>(NewPayment().MarkCompleted);
+        Assert.Throws<DomainRuleException>(NewPayment().MarkCompleted);
 
     [Fact]
     public void MarkCompleted_FromProcessing_SetsCompletedAtAndStatus()
@@ -115,7 +116,7 @@ public class PaymentTests
         var p = NewPayment();
         p.Approve();
         p.MarkProcessing();
-        Assert.Throws<InvalidOperationException>(p.MarkProcessing);
+        Assert.Throws<DomainRuleException>(p.MarkProcessing);
     }
 
     [Fact]
@@ -123,12 +124,12 @@ public class PaymentTests
     {
         var p = NewPayment();
         p.Approve();
-        Assert.Throws<InvalidOperationException>(p.MarkCompleted);
+        Assert.Throws<DomainRuleException>(p.MarkCompleted);
     }
 
     [Fact]
     public void MarkFailed_FromPending_Throws() =>
-        Assert.Throws<InvalidOperationException>(() => NewPayment().MarkFailed("x"));
+        Assert.Throws<DomainRuleException>(() => NewPayment().MarkFailed("x"));
 
     [Fact]
     public void MarkFailed_FromApproved_SetsFailed()
@@ -164,6 +165,6 @@ public class PaymentTests
         p.Approve();
         p.MarkProcessing();
         p.MarkCompleted();
-        Assert.Throws<InvalidOperationException>(() => p.MarkFailed("late"));
+        Assert.Throws<DomainRuleException>(() => p.MarkFailed("late"));
     }
 }

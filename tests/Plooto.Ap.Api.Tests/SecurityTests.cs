@@ -163,7 +163,13 @@ public class DataIsolationTests(ApiTestFactory factory) : IClassFixture<ApiTestF
         var invoice = await theirs.CreateInvoiceAsync((await theirs.CreateContractorAsync()).Id, amount: 77m);
         var payment = (await (await theirs.PostPaymentAsync(invoice.Id)).Content.ReadFromJsonAsync<PaymentResponse>())!;
         await theirs.WaitForPaymentStatusAsync(payment.Id, "Completed");
-        await Task.Delay(500);   // let their statement projection land; ours must stay empty regardless
+        // Wait until their statement projection has landed, so "mine is empty" cannot pass just because we looked too early.
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while ((await theirs.Client.GetFromJsonAsync<StatementResponse>(theirs.Path("/statement")))!.PaymentCount != 1)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "Their statement never reflected the payment.");
+            await Task.Delay(50);
+        }
 
         var statement = await mine.Client.GetFromJsonAsync<StatementResponse>(mine.Path("/statement"));
         Assert.Empty(statement!.Lines);

@@ -1,3 +1,4 @@
+using Plooto.Ap.Domain.Common;
 namespace Plooto.Ap.Domain.Entities;
 
 public enum PaymentStatus { Pending, Approved, Processing, Completed, Failed, Cancelled }
@@ -87,7 +88,7 @@ public class Payment
     {
         if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("A reason is required.", nameof(reason));
         if (Status is not (PaymentStatus.Approved or PaymentStatus.Processing))
-            throw new InvalidOperationException($"Payment in status {Status} cannot fail.");
+            throw new DomainRuleException($"Payment in status {Status} cannot fail.");
         Status = PaymentStatus.Failed;
         FailureReason = reason;
         CompletedAt = DateTimeOffset.UtcNow;
@@ -95,6 +96,6 @@ public class Payment
 
     private void Require(bool ok, string verb, PaymentStatus expected)
     {
-        if (!ok) throw new InvalidOperationException($"Payment can only be {verb} from {expected} (current: {Status}).");
+        if (!ok) throw new DomainRuleException($"Payment can only be {verb} from {expected} (current: {Status}).");
     }
 }

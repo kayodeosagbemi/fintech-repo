@@ -59,6 +59,8 @@ public sealed class PaymentProcessor(
             var timeoutLimit = options.Value.RailTimeout;
             try
             {
+                // Note: WaitAsync does not cancel the in-flight rail task, it only stops us waiting for it. That is acceptable
+                // because the rail call is idempotent on PaymentId, so a retry cannot double-send.
                 // WaitAsync enforces the timeout even if the rail ignores the token, so it can never block the reader.
                 result = await rail.SendAsync(new PaymentRailRequest(payment.Id, payment.Rail ?? "ACH", payment.Amount,
                     payment.Currency, contractor.PayoutAccountRef), ct).WaitAsync(timeoutLimit, ct);

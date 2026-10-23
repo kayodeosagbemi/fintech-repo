@@ -1,3 +1,4 @@
+using Plooto.Ap.Domain.Common;
 using Plooto.Ap.Domain.Entities;
 
 namespace Plooto.Ap.Tests.Domain;
@@ -42,7 +43,7 @@ public class InvoiceTests
     {
         var inv = NewInvoice();
         inv.Approve();
-        Assert.Throws<InvalidOperationException>(inv.Approve);
+        Assert.Throws<DomainRuleException>(inv.Approve);
     }
 
     [Fact]
@@ -58,7 +59,7 @@ public class InvoiceTests
     {
         var inv = NewInvoice();
         inv.Approve();
-        Assert.Throws<InvalidOperationException>(inv.Reject);
+        Assert.Throws<DomainRuleException>(inv.Reject);
     }
 
     [Fact]
@@ -66,7 +67,7 @@ public class InvoiceTests
     {
         var inv = NewInvoice();
         inv.Reject();
-        Assert.Throws<InvalidOperationException>(inv.Approve);
+        Assert.Throws<DomainRuleException>(inv.Approve);
     }
 
     [Fact]
@@ -74,7 +75,7 @@ public class InvoiceTests
     {
         var inv = NewInvoice();
         inv.Void();
-        Assert.Throws<InvalidOperationException>(inv.Approve);
+        Assert.Throws<DomainRuleException>(inv.Approve);
     }
 
     [Fact]
@@ -82,7 +83,7 @@ public class InvoiceTests
     {
         var inv = NewInvoice();
         inv.Approve();
-        Assert.Throws<InvalidOperationException>(() => inv.Update(5m, "USD", new DateOnly(2026, 1, 1), null));
+        Assert.Throws<DomainRuleException>(() => inv.Update(5m, "USD", new DateOnly(2026, 1, 1), null));
     }
 
     [Fact]
@@ -90,12 +91,12 @@ public class InvoiceTests
     {
         var inv = NewInvoice();
         inv.Void();
-        Assert.Throws<InvalidOperationException>(() => inv.Update(5m, "USD", new DateOnly(2026, 1, 1), null));
+        Assert.Throws<DomainRuleException>(() => inv.Update(5m, "USD", new DateOnly(2026, 1, 1), null));
     }
 
     [Fact]
     public void MarkPaid_WhenNotApproved_Throws() =>
-        Assert.Throws<InvalidOperationException>(NewInvoice().MarkPaid);
+        Assert.Throws<DomainRuleException>(NewInvoice().MarkPaid);
 
     [Fact]
     public void MarkPaid_WhenApproved_TransitionsToPaid()
@@ -112,7 +113,7 @@ public class InvoiceTests
         var inv = NewInvoice();
         inv.Approve();
         inv.MarkPaid();
-        Assert.Throws<InvalidOperationException>(() => inv.Update(5m, "USD", new DateOnly(2026, 1, 1), null));
+        Assert.Throws<DomainRuleException>(() => inv.Update(5m, "USD", new DateOnly(2026, 1, 1), null));
     }
 
     [Fact]
@@ -121,7 +122,7 @@ public class InvoiceTests
         var inv = NewInvoice();
         inv.Approve();
         inv.MarkPaid();
-        Assert.Throws<InvalidOperationException>(inv.Void);
+        Assert.Throws<DomainRuleException>(inv.Void);
     }
 
     [Fact]

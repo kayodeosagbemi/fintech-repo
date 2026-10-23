@@ -1,3 +1,4 @@
+using Plooto.Ap.Domain.Common;
 using Plooto.Ap.Domain.Entities;
 
 namespace Plooto.Ap.Tests.Domain;
@@ -10,7 +11,7 @@ public class OtherEntityTests
         var a = ApprovalRequest.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         a.Resolve(ApprovalDecision.Approve, "boss@example.com");
         Assert.Equal(ApprovalStatus.Approved, a.Status);
-        Assert.Throws<InvalidOperationException>(() => a.Resolve(ApprovalDecision.Reject, null));
+        Assert.Throws<DomainRuleException>(() => a.Resolve(ApprovalDecision.Reject, null));
     }
 
     [Fact]
@@ -53,14 +54,14 @@ public class OtherEntityTests
     {
         var now = DateTimeOffset.UtcNow;
         var e = PaymentEvent.Create(Guid.NewGuid(), Guid.NewGuid(), "T", "q", "{}");
-        Assert.Throws<InvalidOperationException>(() => e.MarkProcessed(now));
-        Assert.Throws<InvalidOperationException>(() => e.Requeue(now));
+        Assert.Throws<DomainRuleException>(() => e.MarkProcessed(now));
+        Assert.Throws<DomainRuleException>(() => e.Requeue(now));
         e.MarkDispatched(now);
-        Assert.Throws<InvalidOperationException>(() => e.MarkDispatched(now));
+        Assert.Throws<DomainRuleException>(() => e.MarkDispatched(now));
         e.MarkProcessed(now);
-        Assert.Throws<InvalidOperationException>(() => e.MarkProcessed(now));
-        Assert.Throws<InvalidOperationException>(() => e.Requeue(now));
-        Assert.Throws<InvalidOperationException>(() => e.RecordFailure("x", now));
+        Assert.Throws<DomainRuleException>(() => e.MarkProcessed(now));
+        Assert.Throws<DomainRuleException>(() => e.Requeue(now));
+        Assert.Throws<DomainRuleException>(() => e.RecordFailure("x", now));
     }
 
     [Fact]
@@ -70,10 +71,10 @@ public class OtherEntityTests
         var e = PaymentEvent.Create(Guid.NewGuid(), Guid.NewGuid(), "T", "q", "{}");
         for (var i = 0; i < PaymentEvent.MaxAttempts; i++) e.RecordFailure("boom", now);
         Assert.Equal(OutboxStatus.DeadLettered, e.Status);
-        Assert.Throws<InvalidOperationException>(() => e.MarkDispatched(now));
-        Assert.Throws<InvalidOperationException>(() => e.MarkProcessed(now));
-        Assert.Throws<InvalidOperationException>(() => e.Requeue(now));
-        Assert.Throws<InvalidOperationException>(() => e.RecordFailure("x", now));
+        Assert.Throws<DomainRuleException>(() => e.MarkDispatched(now));
+        Assert.Throws<DomainRuleException>(() => e.MarkProcessed(now));
+        Assert.Throws<DomainRuleException>(() => e.Requeue(now));
+        Assert.Throws<DomainRuleException>(() => e.RecordFailure("x", now));
     }
 
     [Fact]
@@ -112,7 +113,7 @@ public class OtherEntityTests
         var r = IdempotencyRecord.Begin(Guid.NewGuid(), "k", "hash");
         r.Complete(201, "{}");
         Assert.Equal(IdempotencyStatus.Completed, r.Status);
-        Assert.Throws<InvalidOperationException>(() => r.Complete(200, "{}"));
+        Assert.Throws<DomainRuleException>(() => r.Complete(200, "{}"));
     }
 
     [Fact]

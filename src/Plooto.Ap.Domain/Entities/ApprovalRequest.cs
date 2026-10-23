@@ -1,3 +1,4 @@
+using Plooto.Ap.Domain.Common;
 namespace Plooto.Ap.Domain.Entities;
 
 public enum ApprovalStatus { Pending, Approved, Rejected }
@@ -30,7 +31,7 @@ public class ApprovalRequest
     public void Resolve(ApprovalDecision decision, string? approverEmail)
     {
         if (Status != ApprovalStatus.Pending)
-            throw new InvalidOperationException($"Approval already resolved ({Status}).");
+            throw new DomainRuleException($"Approval already resolved ({Status}).");
         Status = decision == ApprovalDecision.Approve ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
         ApproverEmail = approverEmail;
         ResolvedAt = DateTimeOffset.UtcNow;

@@ -70,7 +70,8 @@ public sealed class CompanyScopeFilter : IEndpointFilter
     {
         var routeCompanyId = context.HttpContext.Request.RouteValues["companyId"]?.ToString();
         var tokenCompanyId = context.HttpContext.User.FindFirst(ApiKeyAuthenticationOptions.CompanyIdClaim)?.Value;
-        if (routeCompanyId is null || !string.Equals(routeCompanyId, tokenCompanyId, StringComparison.OrdinalIgnoreCase))
+        // Compare as Guids so any valid textual form of the id (e.g. non-hyphenated) matches.
+        if (!Guid.TryParse(routeCompanyId, out var route) || !Guid.TryParse(tokenCompanyId, out var token) || route != token)
             return Http.Error(StatusCodes.Status403Forbidden, "This API key does not grant access to that company.");
         return await next(context);
     }

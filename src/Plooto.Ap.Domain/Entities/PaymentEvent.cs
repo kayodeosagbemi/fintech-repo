@@ -1,3 +1,4 @@
+using Plooto.Ap.Domain.Common;
 namespace Plooto.Ap.Domain.Entities;
 
 public enum OutboxStatus { Pending, Dispatched, Processed, DeadLettered }
@@ -62,7 +63,7 @@ public class PaymentEvent
     public void RecordFailure(string error, DateTimeOffset now)
     {
         if (Status is not (OutboxStatus.Pending or OutboxStatus.Dispatched))
-            throw new InvalidOperationException($"Cannot record a failure for an event in status {Status}.");
+            throw new DomainRuleException($"Cannot record a failure for an event in status {Status}.");
         error ??= "";
         AttemptCount++;
         LastError = error.Length > 1000 ? error[..1000] : error;
@@ -85,6 +86,6 @@ public class PaymentEvent
 
     private void Guard(bool ok, string verb, OutboxStatus expected)
     {
-        if (!ok) throw new InvalidOperationException($"Event can only be {verb} from {expected} (current: {Status}).");
+        if (!ok) throw new DomainRuleException($"Event can only be {verb} from {expected} (current: {Status}).");
     }
 }

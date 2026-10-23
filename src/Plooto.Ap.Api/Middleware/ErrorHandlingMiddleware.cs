@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Plooto.Ap.Domain.Common;
 using Plooto.Ap.Infrastructure.Persistence;
 
 namespace Plooto.Ap.Api.Middleware;
@@ -10,6 +12,10 @@ namespace Plooto.Ap.Api.Middleware;
 /// </summary>
 public sealed class ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorHandlingMiddleware> logger)
 {
+    private static readonly Regex ParameterSuffix = new(@"\s*\(Parameter '[^']*'\)\s*$", RegexOptions.Compiled);
+
+    internal static string StripParameterSuffix(string message) => ParameterSuffix.Replace(message, "");
+
     public async Task InvokeAsync(HttpContext context)
     {
         try
@@ -20,8 +26,10 @@ public sealed class ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorH
         {
             var (status, message) = ex switch
             {
-                ArgumentException a => (StatusCodes.Status400BadRequest, a.Message),
-                InvalidOperationException i => (StatusCodes.Status409Conflict, i.Message),
+                BadHttpRequestException => (StatusCodes.Status400BadRequest, "The request body is malformed or invalid."),
+                ArgumentException a => (StatusCodes.Status400BadRequest, StripParameterSuffix(a.Message)),
+                // Only domain rule violations carry caller-safe messages; any other InvalidOperationException is internal.
+                DomainRuleException d => (StatusCodes.Status409Conflict, d.Message),
                 DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, "The resource was modified concurrently; retry."),
                 DbUpdateException d when DbErrors.IsUniqueViolation(d) => (StatusCodes.Status409Conflict, "A record with the same unique value already exists."),
                 _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred."),
