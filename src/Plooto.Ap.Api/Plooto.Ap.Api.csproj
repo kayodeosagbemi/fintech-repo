@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Plooto.Ap.Domain\Plooto.Ap.Domain.csproj" />
+    <ProjectReference Include="..\Plooto.Ap.Infrastructure\Plooto.Ap.Infrastructure.csproj" />
+    <ProjectReference Include="..\Plooto.Ap.Messaging\Plooto.Ap.Messaging.csproj" />
+    <ProjectReference Include="..\Plooto.Ap.Api.Contracts\Plooto.Ap.Api.Contracts.csproj" />
+    <ProjectReference Include="..\Plooto.Ap.Services.Validation\Plooto.Ap.Services.Validation.csproj" />
+    <ProjectReference Include="..\Plooto.Ap.Services.Payment\Plooto.Ap.Services.Payment.csproj" />
+    <ProjectReference Include="..\Plooto.Ap.Services.Notification\Plooto.Ap.Services.Notification.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+  </PropertyGroup>
+
+</Project>

@@ -118,3 +118,36 @@ There is no “perfect” solution. We’re interested in **how you think, how y
 If something is unclear, make a reasonable assumption and document it. That is part of the exercise.
 
 Once complete, ensure your final state is pushed to this repository.
+
+## Solution Started Below
+
+### Solution Outline
+Create files named `DESIGN.md`, `RUN-INSTRUCTIONS.md`, and `AI-TRANSCRIPT.md` 
+Save all copilot interactions in `AI-TRANSCRIPT.md` and document my approved design decisions in `DESIGN.md`.
+Write clear run instructions in `RUN-INSTRUCTIONS.md` for building and running the project locally.
+
+Outline of the solution:
+- **Domain Models**: Define core entities such as `Company`, `Contractor`, `Invoice`, and `Payment`.
+- **APIs**: Implement RESTful APIs for creating and managing invoices and payments.
+- **Workflows**: Implement basic workflows for capturing invoices, processing payments, and ensuring data isolation between companies and payees.
+- **Data Storage**: Use an in-memory database or a simple file-based storage for demonstration purposes.
+
+Data Storage Choice: sqlite
+- Implementation details for SQLite integration
+- Setup of database schema for the core entities
+
+Domain Models:
+- `Company`: Represents a company that can issue invoices and make payments.
+- `Contractor`: Represents a contractor or payee who receives payments.
+- `Invoice`: Represents an invoice issued by a company to a contractor.
+- `Payment`: Represents a payment made by a company to a contractor for an invoice.
+
+Scaffolding:
+- Create a new .NET 8 Web API project.
+- Set up the project structure with folders for Models, Controllers, Services, and Data.
+- Implement basic CRUD operations for each entity.
+- Implement validation and error handling to ensure correctness and avoid duplicate payments/transactions.
+- Implement unit tests for the core workflows and API endpoints.
+- Implement logging and monitoring to track the performance and availability of the system. (Log to console for simplicity)
+- Implement basic authentication and authorization to ensure data isolation between companies and payees. (Use simple token-based authentication for demonstration purposes)
+

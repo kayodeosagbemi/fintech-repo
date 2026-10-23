@@ -55,3 +55,15 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Local SQLite data (see PLAN_1.md §1.4 / RUN-INSTRUCTIONS.md)
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Visual Studio / editor state
+.vs/
+.clj-kondo/
+bin/
+obj/

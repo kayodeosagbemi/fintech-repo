@@ -1,0 +1,14 @@
+services:
+  ap-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      # Bind-mount so the SQLite file persists across `docker compose down`/`up`
+      # and is inspectable from the host with any SQLite client.
+      - ./data:/app/data
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
