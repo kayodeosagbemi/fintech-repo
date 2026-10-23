@@ -1,88 +1,108 @@
 # Run Instructions
 
-Two ways to run this project locally. Both read/write the same SQLite file at `data/ap.db` and require no external services — no Postgres/Redis/RabbitMQ/Kafka to stand up, since the messaging layer is entirely in-process (see `PLAN_1.md` §3 for why).
-
-These instructions describe the project once it's built per `PLAN_1.md`. If you're starting from the plan rather than a finished implementation, follow `PLAN_1.md`'s "Suggested implementation order" first — these steps assume `src/Plooto.Ap.Api`, `src/Plooto.Ap.Infrastructure`, `src/Plooto.Ap.Domain`, and `tests/` exist as laid out in §1.2.
+Two ways to run the API locally, plus a console client to drive it. Neither needs an external service: no Postgres, Redis, RabbitMQ or Kafka, because the messaging layer is in-process (see `DESIGN.md` for why). Data lives in one SQLite file at `data/ap.db`.
 
 ---
 
-## Option A — Run from source (.NET 8 SDK)
+## Option A: Run from source (.NET 8 SDK)
 
-**Prerequisites:** [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0). No database server, no Docker.
+**Prerequisites:** [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (a newer SDK also works; the projects target `net8.0`, so the .NET 8 runtime must be installed).
 
 ```bash
-# 1. Clone and restore
 git clone <repo-url>
 cd BE-take-home-oluwakayode-osagbemi
+
 dotnet restore
-
-# 2. Build
 dotnet build
+dotnet test                                   # optional: ~250 tests, no external services needed
 
-# 3. Run the test suite (optional but recommended)
-dotnet test
-
-# 4. Run the API
-dotnet run --project src/Plooto.Ap.Api
+dotnet run --project src/Plooto.Ap.Api        # API on http://localhost:5080
 ```
 
-- On first run, the app creates `src/Plooto.Ap.Api/data/` and `ap.db` automatically and applies EF Core migrations at startup (`Database.Migrate()`) — there is no separate `dotnet ef database update` step to run manually.
-- In the `Development` environment, seed data (a couple of companies with contractors/invoices) loads automatically so there's something to query immediately — see `PLAN_1.md` §1.4.
-- The console output prints the listening URL (e.g. `http://localhost:5080`); use that in place of `http://localhost:5000` below if it differs, or pin it with `dotnet run --project src/Plooto.Ap.Api --urls http://localhost:5000`.
+- On first run the app creates `src/Plooto.Ap.Api/data/ap.db` and applies EF Core migrations automatically (`Database.Migrate()`); there is no manual `dotnet ef database update` step. If a migration fails, the app exits with the error rather than running on a partial schema.
+- In the `Development` environment (the default for `dotnet run`) two demo companies with contractors and invoices are seeded, with fixed, obviously-fake API keys:
 
-**Try it:**
+  | Company | API key |
+  |---|---|
+  | Acme Inc (payments above 5,000 need human approval) | `dev-acme-api-key` |
+  | Globex Corp (no approval required) | `dev-globex-api-key` |
+
+  Set `ASPNETCORE_ENVIRONMENT=Production` to disable seeding (and those keys).
+- To change the port: `dotnet run --project src/Plooto.Ap.Api --urls http://localhost:5090` (and point the console at it). Port 5080 is used rather than 5000 because 5000 is reserved on many Windows machines and taken by AirPlay on macOS.
+- `GET /health` returns `{"status":"ok"}`.
+
+**Reset local state:** stop the app and delete `src/Plooto.Ap.Api/data/ap.db` (and the `-wal`/`-shm` files next to it).
+
+### Try it with curl
 
 ```bash
-# Create a company — response includes a one-time ApiKey
-curl -X POST http://localhost:5000/api/v1/companies \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Acme Inc"}'
+# Create a company: the response contains a one-time ApiKey (no auth needed for this call)
+curl -X POST http://localhost:5080/api/v1/companies \
+  -H "Content-Type: application/json" -d '{"name":"My Co"}'
 
-# List invoices for that company (replace <companyId> / <api-key>)
-curl http://localhost:5000/api/v1/companies/<companyId>/invoices \
+# Who am I? (finds your company id from your key)
+curl http://localhost:5080/api/v1/me -H "Authorization: Bearer <api-key>"
+
+# Everything else is under /api/v1/companies/<companyId>/...
+curl http://localhost:5080/api/v1/companies/<companyId>/invoices \
   -H "Authorization: Bearer <api-key>"
 
-# Create a payment — Idempotency-Key is required on payment creation
-curl -X POST http://localhost:5000/api/v1/companies/<companyId>/payments \
+# Pay an invoice. The Idempotency-Key header is required; reuse the key to retry safely
+curl -X POST http://localhost:5080/api/v1/companies/<companyId>/payments \
   -H "Authorization: Bearer <api-key>" \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
   -d '{"invoiceId":"<invoiceId>"}'
 ```
 
-**Reset local state:** stop the app and delete `src/Plooto.Ap.Api/data/ap.db`.
+Payments are processed asynchronously: the POST returns `Pending` or `Approved`, then `GET .../payments/<paymentId>` shows `Completed` a moment later. Simulated rail behaviour: an amount whose cents are `.13` is declined, one with `.66` never answers (times out), anything else succeeds.
 
 ---
 
-## Option B — Run via Docker (no .NET SDK required)
+## Option B: Run via Docker (no .NET SDK required)
 
-**Prerequisites:** Docker Desktop, or Docker Engine + the Compose plugin. Nothing else.
-
-Repo root includes `Dockerfile`, `.dockerignore`, and `docker-compose.yml` — a multi-stage build (SDK image to build/publish, slim ASP.NET runtime image to run) with the SQLite data directory bind-mounted to the host.
+**Prerequisites:** Docker Desktop, or Docker Engine plus the Compose plugin.
 
 ```bash
-# 1. Build the image and start the container
-docker compose up --build
-
-# 2. API is reachable at:
-#    http://localhost:8080
+docker compose up --build        # API on http://localhost:8080
+docker compose down              # stop
 ```
 
-- The SQLite database is bind-mounted to `./data/ap.db` on the host (the same `data/` convention as Option A), so it persists across `docker compose down` / `docker compose up` cycles and can be opened with any SQLite client even while the container is stopped.
-- Run the same `curl` examples as Option A, substituting port `8080` for `5000`.
+- The SQLite file is bind-mounted to `./data/ap.db`, so it survives restarts and can be opened with any SQLite client.
+- Use the same curl examples with port `8080`, and the same seeded dev keys (the image runs in `Development`).
+- Reset state: `docker compose down`, then delete `./data/ap.db`.
+- Note: the `Dockerfile` follows the current project layout, but the image was not built in the environment this was developed in (Docker was not available there). If the build fails, Option A is the verified path.
+
+---
+
+## Console client (manual test tool)
+
+A menu-driven console app that drives the API over HTTP, exercising every use case: companies, contractors, invoices, CSV import, single and batch payments, approvals, payment details and the statement. It works against Option A or Option B.
 
 ```bash
-# Stop the container
-docker compose down
+# in a second terminal, with the API already running
+dotnet run --project src/Plooto.Ap.Client.Console
 ```
 
-**Reset local state:** `docker compose down`, then delete `./data/ap.db` on the host.
+Defaults to `http://localhost:5080`. Point it elsewhere with the menu (option 1) or `PLOOTO_API_URL`. To skip typing credentials, set `PLOOTO_API_KEY` (and optionally `PLOOTO_COMPANY_ID`; if omitted the company is looked up from the key).
 
-**Rebuilding after code changes:**
+A quick tour:
 
-```bash
-docker compose up --build
-```
+1. **Option 1**: press Enter for the default URL, leave the company id blank and enter `dev-acme-api-key` (a seeded demo company), or
+   **option 2** to create your own company (this signs you in automatically and prints a one-time key).
+2. **Option 14 / 13**: list the contractors and invoices.
+3. **Option 7**: pay an invoice, then **option 10** to watch it move to `Completed`.
+4. **Option 15** switches on the approval policy; payments above the threshold then wait in `Pending`. **Option 9** lists and resolves them.
+5. **Option 6** writes a blank CSV template; fill it in and use **option 5** to import. Bad rows are reported with their line number and reason while good rows still import. Example row (remove the leading `#` to use it):
+
+   ```csv
+   InvoiceNumber,ContractorEmail,Amount,Currency,DueDate,Description
+   INV-1001,jane.doe@example.com,2500.00,USD,2026-11-15,October consulting services
+   ```
+
+   A static copy of the template is in `docs/invoice-template.csv`. The contractor must already exist (the file never creates contractors and never names a company: the company always comes from your API key).
+6. **Option 8** pays several invoices at once (blank input means "all Submitted invoices") and reports a result per item.
+7. **Option 11**: the company statement with a running balance.
 
 ---
 
@@ -92,4 +112,4 @@ docker compose up --build
 dotnet test
 ```
 
-Works identically in either environment (SDK installed or Docker-only — tests run inside the SDK, not the container). Tests use an isolated in-memory SQLite connection per test run (see `PLAN_1.md` §1.5) and never touch `data/ap.db`, so running the suite is always safe and doesn't require the API to be running.
+Tests use real SQLite (an in-memory connection, or a throwaway temp file when background services run concurrently) and never touch `data/ap.db`, so running them is always safe and does not need the API to be running.

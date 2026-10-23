@@ -19,6 +19,13 @@ suite.Session.ApiKey = Environment.GetEnvironmentVariable("PLOOTO_API_KEY") ?? s
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
+// A key from the environment is enough: discover the company it belongs to.
+if (suite.Session.ApiKey is not null && suite.Session.CompanyId is null)
+{
+    var resolved = await suite.Configure.ExecuteAsync(suite.Session.BaseUrl, null, suite.Session.ApiKey, cts.Token);
+    if (!resolved.Success) ui.Error(resolved.Error!);
+}
+
 while (!cts.IsCancellationRequested)
 {
     ui.PrintMenu(suite.Session);

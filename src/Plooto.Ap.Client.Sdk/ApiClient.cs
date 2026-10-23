@@ -8,7 +8,7 @@ namespace Plooto.Ap.Client.Sdk;
 /// <summary>Connection details shared by every front-end (console today, Blazor tomorrow). Held in memory only.</summary>
 public sealed class ClientSession
 {
-    public string BaseUrl { get; set; } = "http://localhost:5000";
+    public string BaseUrl { get; set; } = "http://localhost:5080";
     public string? ApiKey { get; set; }
     public Guid? CompanyId { get; set; }
     public bool IsAuthenticated => !string.IsNullOrWhiteSpace(ApiKey) && CompanyId is not null;
